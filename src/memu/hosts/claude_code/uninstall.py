@@ -11,8 +11,8 @@ import sys
 from typing import Any
 
 from memu.hosts.claude_code import hook_install
-from memu.hosts.codex.install_language import LANGUAGE
 from memu.hosts.hooks.admission import workspace_lock
+from memu.hosts.install_language import LANGUAGE
 
 
 async def run(args: argparse.Namespace) -> int:

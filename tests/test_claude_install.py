@@ -13,12 +13,12 @@ from typing import Any
 
 import pytest
 
+from memu.hosts import installation as lifecycle
 from memu.hosts.claude_code import cli_prepare, doctor, hook_install, install, memorize_hook
 from memu.hosts.claude_code.cli import SPEC, main
-from memu.hosts.codex import install as codex_install
 from memu.hosts.hooks.admission import workspace_lock
 
-BACKEND = codex_install._backend
+BACKEND = lifecycle.backend
 
 
 @pytest.fixture
@@ -43,7 +43,7 @@ def machine(tmp_path, monkeypatch):
         assert invoke is command
         calls.append(["backend"])
 
-    monkeypatch.setattr(codex_install, "_backend", backend)
+    monkeypatch.setattr(lifecycle, "backend", backend)
     return home, tmp_path / "state", calls
 
 
@@ -190,6 +190,7 @@ def test_native_discovery_without_path(tmp_path, monkeypatch, platform):
 @pytest.mark.parametrize("platform", ["win32", "darwin", "linux"])
 def test_official_installer_uses_platform_shell(monkeypatch, platform):
     monkeypatch.setattr(cli_prepare, "sys", SimpleNamespace(platform=platform, stderr=sys.stderr))
+    monkeypatch.setattr(cli_prepare.cli_install, "sys", SimpleNamespace(platform=platform, stderr=sys.stderr))
     monkeypatch.setattr(cli_prepare.shutil, "which", lambda value: value)
     seen = []
 
@@ -203,7 +204,7 @@ def test_official_installer_uses_platform_shell(monkeypatch, platform):
         assert kwargs["check"] is True
         seen.append(argv)
 
-    monkeypatch.setattr(cli_prepare.urllib.request, "urlopen", download)
+    monkeypatch.setattr(cli_prepare.cli_install.urllib.request, "urlopen", download)
     monkeypatch.setattr(cli_prepare.subprocess, "run", execute)
     cli_prepare._install()
     assert seen[0][0] == ("powershell.exe" if platform == "win32" else "bash")
@@ -301,7 +302,7 @@ def test_shared_backend_configuration_runs_backend_only_doctor(machine, monkeypa
 
     # Exercise the real shared backend gate; no new config or hook checks before registration.
     config_file.write_values({"MEMU_MEMORY_MODE": "cloud", "MEMU_CLOUD_API_KEY": "fixture-only"})
-    monkeypatch.setattr(codex_install, "_backend", BACKEND)
+    monkeypatch.setattr(lifecycle, "backend", BACKEND)
     calls = []
 
     async def command(argv):

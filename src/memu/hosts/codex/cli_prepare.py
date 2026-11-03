@@ -1,7 +1,6 @@
 """Prepare the standalone Codex executable without changing memU integration."""
 
 # Installer messages use Chinese punctuation.
-# ruff: noqa: RUF001
 
 from __future__ import annotations
 
@@ -11,14 +10,12 @@ import os
 import shutil
 import subprocess
 import sys
-import tempfile
 import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
 
-from memu import trust
-from memu.hosts.codex.install_language import text
+from memu.hosts import cli_install
 
 
 def _installation_directory() -> Path:
@@ -90,37 +87,10 @@ def find_executable() -> Path:
 
 
 def _install() -> None:
-    windows = sys.platform == "win32"
-    shell = shutil.which("powershell.exe" if windows else "sh")
-    if shell is None:
-        raise FileNotFoundError("The official Codex installer requires PowerShell on Windows or sh on Unix")  # noqa: TRY003
-    extension = "ps1" if windows else "sh"
-    url = f"https://chatgpt.com/codex/install.{extension}"
-    print(text("📥 正在下载官方 Codex 安装器：{url}", url=url), file=sys.stderr, flush=True)
-    with tempfile.TemporaryDirectory(prefix="memu-codex-install-") as directory:
-        script = Path(directory) / f"install.{extension}"
-        request = urllib.request.Request(url, headers={"User-Agent": "memu-cli"})  # noqa: S310
-        with urllib.request.urlopen(request, timeout=30, **trust.urlopen_kwargs()) as response:  # noqa: S310
-            data = response.read(1024 * 1024 + 1)
-        if not data or len(data) > 1024 * 1024:
-            raise ValueError("The Codex installer download is empty or exceeds 1 MiB")  # noqa: TRY003
-        script.write_bytes(data)
-        argv = (
-            [shell, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", str(script)]
-            if windows
-            else [shell, str(script)]
-        )
-        print(text("📦 正在运行官方安装器，下载和安装可能需要几分钟……"), file=sys.stderr, flush=True)
-        # Keep installer diagnostics separate from the command's optional JSON result.
-        subprocess.run(  # noqa: S603
-            argv,
-            stdin=subprocess.DEVNULL,
-            stdout=sys.stderr,
-            stderr=sys.stderr,
-            env={**os.environ, "CODEX_NON_INTERACTIVE": "1"},
-            timeout=300,
-            check=True,
-        )
+    suffix = "ps1" if sys.platform == "win32" else "sh"
+    cli_install.install(
+        "Codex", f"https://chatgpt.com/codex/install.{suffix}", unix_shell="sh", env={"CODEX_NON_INTERACTIVE": "1"}
+    )
 
 
 def _probe(path: Path) -> dict[str, Any]:

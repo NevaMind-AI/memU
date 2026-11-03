@@ -8,12 +8,10 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
-import urllib.request
 from pathlib import Path
 from typing import Any
 
-from memu import trust
+from memu.hosts import cli_install
 
 
 def _desktop_binary(path: Path) -> bool:
@@ -46,29 +44,8 @@ def find_executable(selected: str | None = None) -> Path:
 
 
 def _install() -> None:
-    windows = sys.platform == "win32"
-    shell = shutil.which("powershell.exe" if windows else "bash")
-    if shell is None:
-        raise FileNotFoundError("The official Claude installer requires PowerShell on Windows or bash on Unix")  # noqa: TRY003
-    suffix = "ps1" if windows else "sh"
-    url = f"https://claude.ai/install.{suffix}"
-    print(f"Downloading official Claude installer: {url}", file=sys.stderr, flush=True)
-    with tempfile.TemporaryDirectory(prefix="memu-claude-install-") as directory:
-        script = Path(directory) / f"install.{suffix}"
-        request = urllib.request.Request(url, headers={"User-Agent": "memu-cli"})  # noqa: S310
-        with urllib.request.urlopen(request, timeout=30, **trust.urlopen_kwargs()) as response:  # noqa: S310
-            data = response.read(1024 * 1024 + 1)
-        if not data or len(data) > 1024 * 1024:
-            raise ValueError("Invalid official installer download size")  # noqa: TRY003
-        script.write_bytes(data)
-        argv = (
-            [shell, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", str(script)]
-            if windows
-            else [shell, str(script)]
-        )
-        subprocess.run(  # noqa: S603
-            argv, stdin=subprocess.DEVNULL, stdout=sys.stderr, stderr=sys.stderr, timeout=300, check=True
-        )
+    suffix = "ps1" if sys.platform == "win32" else "sh"
+    cli_install.install("Claude", f"https://claude.ai/install.{suffix}", unix_shell="bash")
 
 
 def prepare(selected: str | None = None, *, install_missing: bool = False) -> Path:
