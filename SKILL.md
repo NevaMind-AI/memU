@@ -11,10 +11,9 @@ description: Install or uninstall memU for whatever agent you are — identify y
 > and is always in sync with the installed code. Do not install from memory or
 > from blog posts; print the guide and follow it to the letter.
 
-memU integrates with a host agent through two seams: **record** (a scheduled
-bridging task mines your session log into durable memory) and **inject** (a
-standing instruction in your instruction file makes you retrieve before
-answering). Each supported host has its own adapter binary carrying its own
+memU integrates with a host agent through two seams: **record** saves session
+information into durable memory, and **inject** retrieves relevant memory before
+answering. Each supported host has its own adapter binary carrying its own
 install guide. Your job here is three steps: install the package, pick your
 binary, print and follow its guide.
 
@@ -78,7 +77,11 @@ It probes this machine and reports, per agent, whether **memorization** works
 instruction file exists to patch) — and it will redirect you to a dedicated
 binary if your host turns out to have one.
 
-Then, holding your binary, finish this step by creating memU's configuration
+For Codex, continue directly to Step 3: its installer handles backend configuration
+and verification in one invocation. Pass any user-supplied backend inputs to that
+installer when the guide requests them.
+
+For other hosts, holding your binary, finish this step by creating memU's configuration
 file.
 
 ```
@@ -94,11 +97,9 @@ device, run bare `<your-binary> init` and Step 3's guide will set up local memor
 <your-binary> docs install
 ```
 
-Read what it prints, top to bottom, and follow it exactly. Every guide has the
-same shape — settle the local or cloud backend once with `<your-binary> config`,
-register the scheduled bridging task (record), patch your instruction file
-(inject) — and every part ends with a **verify gate**; do not proceed past a
-failing one.
+Read what it prints, top to bottom, and follow it exactly. The host guide defines
+how to configure the backend and enable automatic recording and retrieval. Follow
+its verification gates and final report.
 
 Three rules that hold for every host:
 

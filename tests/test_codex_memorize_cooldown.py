@@ -311,8 +311,9 @@ def test_default_callback_and_cli_share_host_base(tmp_path, monkeypatch, capsys)
         calls.append(args)
         return path
 
+    monkeypatch.setattr(memorize_hook.cli_prepare, "_discover", lambda _: tmp_path / "codex.exe")
     monkeypatch.setattr(notify_console, "launch_background", launch)
-    args = cli.build_parser().parse_args(["memorize-hook", "--agent", "unused"])
+    args = cli.build_parser().parse_args(["memorize-hook"])
     assert asyncio.run(memorize_hook._cmd_memorize_hook(args)) == 0
     expected = str(tmp_path / ".memu/hosts/codex")
     assert str(calls[0][1].base) == expected

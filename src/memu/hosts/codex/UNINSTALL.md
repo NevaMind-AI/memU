@@ -89,15 +89,24 @@ hooks and events. Remove each corresponding approval using the installed Codex
 version's hook trust facilities; current Windows versions persist the fingerprint
 in `~/.codex/config.toml` under `hooks.state` as `trusted_hash`.
 
-Trust keys include the hooks file path and matcher/command indices. If removal
-changes other hooks' indices, verify their approvals through Codex rather than
-copying or deleting unrelated fingerprints. Repeating removal when the memU
-entry is absent must preserve all unrelated configuration.
+Trust keys include the hooks file path and matcher/command indices. Removal
+preserves surviving hooks' approvals when their indices change. Repeating removal
+when the memU entry is absent preserves unrelated configuration.
 
-Automatic hook/trust removal is not yet integrated in memu-cli. If safe removal
-cannot be completed with the installed Codex version, report uninstall as pending
-and retain the executable. Do not leave a registered hook pointing at a removed
-package.
+The terminal command unregisters the two current memU handlers:
+
+```text
+memu-codex uninstall
+```
+
+Codex CLI is optional. With a working CLI, the command verifies removal through
+Codex. Otherwise it removes definitions locally and remaps existing trust tables
+for surviving hooks, preserving their fingerprints. It backs up hooks.json and
+any config.toml used by local trust handling. Repeating it is a no-op. Legacy
+integrations, processing data and the package are retained. Custom trust layouts
+that cannot be safely edited return a diagnostic before mutation. The remaining
+steps in this guide cover broader removal separately.
+If a required check fails, retain the executable and inspect the diagnostic.
 
 ### 2.2 Historical entries — AGENTS instruction and retrieve skill
 

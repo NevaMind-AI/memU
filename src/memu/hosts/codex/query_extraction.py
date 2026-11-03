@@ -4,16 +4,18 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
+import re
 import signal
 import subprocess
 import sys
 import tempfile
 import time
+import tomllib
 from pathlib import Path
 from typing import Any
 
 from memu.env import LONG_QUERY_CHARS
+from memu.hosts.codex import cli_prepare
 
 EXTRACT_THRESHOLD = LONG_QUERY_CHARS
 EXTRACT_INPUT_LIMIT = 32000
@@ -46,20 +48,25 @@ def select_query(prompt: str, trace: dict[str, Any]) -> str:
         trace["extraction_elapsed_ms"] = round((time.monotonic() - started) * 1000)
 
 
+def _https_options() -> list[str]:
+    """One-shot extraction should not spend its deadline retrying WebSockets."""
+    home = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex").expanduser()
+    config = home / "config.toml"
+    values = tomllib.loads(config.read_text(encoding="utf-8-sig")) if config.is_file() else {}
+    providers = [
+        name
+        for name, settings in values.get("model_providers", {}).items()
+        if settings.get("supports_websockets") is True and re.fullmatch(r"[A-Za-z0-9_-]+", name)
+    ]
+    return [
+        option
+        for provider in sorted(providers)
+        for option in ("-c", f"model_providers.{provider}.supports_websockets=false")
+    ]
+
+
 def _extract(prompt: str) -> str:
-    binary = shutil.which("codex")
-    if not binary:
-        raise FileNotFoundError("Codex CLI unavailable")  # noqa: TRY003
-    if sys.platform == "win32" and Path(binary).suffix.lower() != ".exe":
-        # Resolve npm's wrapper to its native executable so timeout kills the actual agent.
-        candidates = list(
-            Path(binary).parent.glob(
-                "node_modules/@openai/codex/node_modules/@openai/codex-win32-*/vendor/*/bin/codex.exe"
-            )
-        )
-        if len(candidates) != 1:
-            raise FileNotFoundError("Native Codex executable unavailable")  # noqa: TRY003
-        binary = str(candidates[0])
+    binary = str(cli_prepare.find_executable())
     with tempfile.TemporaryDirectory(prefix="memu-query-") as directory:
         base = Path(directory)
         schema = base / "schema.json"
@@ -99,6 +106,7 @@ def _extract(prompt: str) -> str:
             [
                 binary,
                 "exec",
+                *_https_options(),
                 "--ephemeral",
                 "--disable",
                 "hooks",

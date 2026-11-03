@@ -42,7 +42,7 @@ def test_prompt_hook_preserves_query_and_logs(tmp_path, monkeypatch, capsys, out
     final = records[-1]
     assert final["session_id"] == "test-session"
     assert final["elapsed_ms"] >= final["retrieve_elapsed_ms"] >= 0
-    assert "second line" not in logs[0].read_text(encoding="utf-8")
+    assert final["query"] == prompt
     assert calls[0][0] == [
         sys.executable,
         "-m",
@@ -63,7 +63,16 @@ def test_prompt_hook_preserves_query_and_logs(tmp_path, monkeypatch, capsys, out
         assert final["additional_context"] == specific["additionalContext"]
         assert f"memU retrieval subprocess elapsed: {final['retrieve_elapsed_ms']} ms" in specific["additionalContext"]
         assert "not total answer time" in specific["additionalContext"]
-        assert final["retrieve_result"] == json.loads(specific["additionalContext"].split("\n", 2)[2])
+        context = specific["additionalContext"]
+        metadata = json.loads(context.splitlines()[1])
+        assert metadata == {
+            "query": prompt,
+            "query_source": "original",
+            "extraction_status": "not_needed",
+            "query_kind": "short",
+        }
+        assert "memU retrieval completed" in context
+        assert final["retrieve_result"] == json.loads(context.splitlines()[-1])
         assert final["status"] == "context_returned"
         assert final["counts"] == {"hits": 1, "resources": 0}
     else:
@@ -93,3 +102,37 @@ def test_prompt_hook_empty_and_invalid_input(tmp_path, monkeypatch, capsys, prom
     log = next((tmp_path / ".memu/hosts/codex/log/hooks/retrieve").glob("*.log"))
     final = json.loads(log.read_text(encoding="utf-8").splitlines()[-1])
     assert final["status"] == ("empty_prompt" if prompt == "" else "failed")
+
+
+def test_extracted_query_is_injected_verbatim(tmp_path, monkeypatch, capsys):
+    prompt = "安装历史背景" * 60
+    query = '独立 CLI "安装"\n历史验证'
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    monkeypatch.setattr(
+        sys, "stdin", io.StringIO(json.dumps({"hook_event_name": "UserPromptSubmit", "prompt": prompt}))
+    )
+
+    def select(value, trace):
+        assert value == prompt
+        trace.update(query_source="extracted", extraction_status="succeeded")
+        return query
+
+    def retrieve(argv, **kwargs):
+        assert kwargs["input"] == query.encode("utf-8")
+        return subprocess.CompletedProcess(
+            argv, 0, json.dumps({"hits": [{"text": "历史"}], "resources": []}).encode(), b""
+        )
+
+    monkeypatch.setattr(prompt_hook, "select_query", select)
+    monkeypatch.setattr(prompt_hook.subprocess, "run", retrieve)
+    assert main(["prompt-hook"]) == 0
+    context = json.loads(capsys.readouterr().out)["hookSpecificOutput"]["additionalContext"]
+    metadata = json.loads(context.splitlines()[1])
+    assert metadata == {
+        "query": query,
+        "query_source": "extracted",
+        "extraction_status": "succeeded",
+        "query_kind": "extracted",
+    }
+    log = next((tmp_path / ".memu/hosts/codex/log/hooks/retrieve").glob("*.log"))
+    assert json.loads(log.read_text(encoding="utf-8").splitlines()[-1])["query"] == query

@@ -3,11 +3,25 @@ import asyncio
 import io
 import json
 import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 
 from memu.hosts.codex import memorize_hook
 
 
-def test_submit_starts_background_without_waiting(tmp_path, monkeypatch, capsys):
+@pytest.fixture(autouse=True)
+def standalone_cli(monkeypatch):
+    monkeypatch.setattr(memorize_hook.cli_prepare, "_discover", lambda _: Path("current/codex.exe"))
+
+
+@pytest.mark.parametrize("npm_wrapper", [False, True])
+def test_submit_starts_background_without_waiting(tmp_path, monkeypatch, capsys, npm_wrapper):
+    if npm_wrapper:
+        monkeypatch.setattr(memorize_hook.cli_prepare, "sys", SimpleNamespace(platform="win32"))
+        monkeypatch.setattr(memorize_hook.cli_prepare, "_discover", lambda _: Path("npm/codex.cmd"))
+        monkeypatch.setattr(Path, "glob", lambda *args: iter([Path("current/codex.exe")]))
     calls = []
     monkeypatch.delenv(memorize_hook.BACKGROUND_ENV, raising=False)
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps({"hook_event_name": "UserPromptSubmit"})))
@@ -22,7 +36,15 @@ def test_submit_starts_background_without_waiting(tmp_path, monkeypatch, capsys)
     args = argparse.Namespace(base_dir=str(tmp_path), agent="codex.exe", session_dir="sessions")
     assert asyncio.run(memorize_hook._cmd_memorize_hook(args)) == 0
     argv, layout, _ = calls[0]
-    assert argv == ["hook-run", "--base-dir", str(tmp_path), "--agent", "codex.exe", "--session-dir", "sessions"]
+    assert argv == [
+        "hook-run",
+        "--base-dir",
+        str(tmp_path),
+        "--agent",
+        str(Path("current/codex.exe")),
+        "--session-dir",
+        "sessions",
+    ]
     assert layout.base == tmp_path
     context = json.loads(capsys.readouterr().out)["hookSpecificOutput"]["additionalContext"]
     assert '"status": "started"' in context and str(path).replace("\\", "\\\\") in context
@@ -57,6 +79,20 @@ def test_evolve_child_inherits_recursion_guard(tmp_path, monkeypatch, capsys):
     assert "MEMU_GUARD=1" in capsys.readouterr().out
 
 
+def test_missing_standalone_reports_failure_without_starting_worker(monkeypatch, capsys):
+    monkeypatch.delenv(memorize_hook.BACKGROUND_ENV, raising=False)
+    monkeypatch.setattr(memorize_hook.cli_prepare, "_discover", lambda _: None)
+    monkeypatch.setattr(sys, "stdin", io.StringIO('{"hook_event_name":"UserPromptSubmit"}'))
+    monkeypatch.setattr(
+        memorize_hook.notify_console, "launch_background", lambda *args: pytest.fail("Must not launch without CLI")
+    )
+    args = argparse.Namespace(agent="old/codex.exe")
+    assert asyncio.run(memorize_hook._cmd_memorize_hook(args)) == 0
+    result = capsys.readouterr()
+    assert "Standalone Codex CLI unavailable" in result.err
+    assert '"status": "failed"' in json.loads(result.out)["hookSpecificOutput"]["additionalContext"]
+
+
 def test_invalid_submit_does_not_start_worker(monkeypatch, capsys):
     monkeypatch.setattr(sys, "stdin", io.StringIO('{"hook_event_name":"Stop"}'))
     assert asyncio.run(memorize_hook._cmd_memorize_hook(argparse.Namespace())) == 0
@@ -70,6 +106,7 @@ def test_codex_exposes_submit_entry_and_background_worker():
     from memu.hosts.host_cli import build_parser
 
     parser = build_parser(SPEC)
+    assert parser.parse_args(["memorize-hook"]).agent is None
     assert parser.parse_args(["memorize-hook", "--agent", "codex"]).agent == "codex"
     assert parser.parse_args(["hook-run"]).console is False
     help_text = parser.format_help()

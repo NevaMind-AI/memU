@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from memu.hosts.bridging import Layout
+from memu.hosts.codex import cli_prepare
 
 
 class AppServer:
@@ -30,7 +31,8 @@ class AppServer:
             env=env,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            # Inherit stderr so diagnostics remain visible and cannot fill an unread pipe.
+            # Drain diagnostics concurrently so a verbose server cannot block its RPC responses.
+            stderr=subprocess.PIPE,
             text=True,
             encoding="utf-8",
         )
@@ -39,6 +41,37 @@ class AppServer:
         if self.process.stdout is None:
             raise RuntimeError("Codex app-server stdout is unavailable")  # noqa: TRY003
         threading.Thread(target=self._read, daemon=True).start()
+        self.stderr_thread = threading.Thread(target=self._read_stderr, daemon=True)
+        self.stderr_thread.start()
+
+    def _read_stderr(self) -> None:
+        if self.process.stderr is None:
+            return
+        for line in self.process.stderr:
+            # Codex logs this nonfatal configuration advisory at ERROR severity.
+            plain = re.sub(r"\x1b\[[0-9;]*m", "", line)
+            advisory = (
+                r"Codex is ignoring \d+ unrecognized configuration settings?\. "
+                r"Check for typos or deprecated settings\."
+            )
+            if re.fullmatch(r"(?:\S+\s+)?ERROR codex_app_server: " + advisory + r"\s*", plain):
+                line = plain.replace("ERROR codex_app_server:", "WARN codex_app_server:", 1)
+            elif plain.lstrip().startswith("{"):
+                try:
+                    diagnostic = json.loads(plain)
+                except ValueError:
+                    diagnostic = None
+                if (
+                    isinstance(diagnostic, dict)
+                    and diagnostic.get("level") == "ERROR"
+                    and diagnostic.get("target") == "codex_app_server"
+                    and isinstance(diagnostic.get("fields"), dict)
+                    and isinstance(message := diagnostic["fields"].get("message"), str)
+                    and re.match(advisory + r"(?:\n|$)", message)
+                ):
+                    diagnostic["level"] = "WARN"
+                    line = json.dumps(diagnostic, ensure_ascii=False) + "\n"
+            print(line, end="", file=sys.stderr, flush=True)
 
     def _read(self) -> None:
         if self.process.stdout is None:
@@ -88,6 +121,7 @@ class AppServer:
             except subprocess.TimeoutExpired:
                 self.process.terminate()
                 self.process.wait(timeout=5)
+        self.stderr_thread.join(timeout=5)
 
 
 def _atomic_write(path: Path, data: bytes) -> None:
@@ -126,12 +160,12 @@ def _command(subcommand: str = "prompt-hook") -> str:
 
 
 def _owns_command(command: str, subcommand: str = "prompt-hook") -> bool:
+    value = r"""(?:"[^"]*"|'(?:[^']|'')*'|[^\s'"&;|]+)"""
+    options = r"(?:\s+--base-dir\s+" + value + r")?(?:\s+--default-home)?"
     if subcommand == "memorize-hook":
-        command = command.split(" --agent ", 1)[0]
+        options = r"(?:\s+--(?:agent|base-dir|session-dir)\s+" + value + r"|\s+--default-home)*"
     match = re.fullmatch(
-        r"""\s*(?:&\s+)?(?:"([^"]+)"|'((?:[^']|'')+)'|([^\s'"&;|]+))\s+"""
-        + re.escape(subcommand)
-        + r"""(?:\s+--base-dir\s+(?:"[^"]*"|'(?:[^']|'')*'|[^\s'"&;|]+))?\s*""",
+        r"""\s*(?:&\s+)?(?:"([^"]+)"|'((?:[^']|'')+)'|([^\s'"&;|]+))\s+""" + re.escape(subcommand) + options + r"\s*",
         command,
     )
     if match is None:
@@ -173,6 +207,13 @@ def _trust(server: AppServer, listed: dict[str, Any], command: str, hooks_file: 
             f"Expected one loaded memU hook, found {len(entries)}; check Codex hooks/list warnings"
         )
     entry = entries[0]
+    _trust_entry(server, entry)
+    verified = _entries(server.request("hooks/list", {"cwds": [str(cwd)]}), command, str(hooks_file))
+    if len(verified) != 1 or verified[0].get("trustStatus") != "trusted":
+        raise RuntimeError("Codex did not confirm the memU prompt hook as trusted")  # noqa: TRY003
+
+
+def _trust_entry(server: AppServer, entry: dict[str, Any]) -> None:
     key, fingerprint = entry.get("key"), entry.get("currentHash")
     if not key or not fingerprint:
         raise RuntimeError("Codex did not return hook key and currentHash")  # noqa: TRY003
@@ -184,24 +225,24 @@ def _trust(server: AppServer, listed: dict[str, Any], command: str, hooks_file: 
             "mergeStrategy": "upsert",
         },
     )
-    verified = _entries(server.request("hooks/list", {"cwds": [str(cwd)]}), command, str(hooks_file))
-    if len(verified) != 1 or verified[0].get("trustStatus") != "trusted":
-        raise RuntimeError("Codex did not confirm the memU prompt hook as trusted")  # noqa: TRY003
 
 
-def install(codex: str, hooks_file: Path, cwd: Path, base_dir: str | None = None) -> None:
+def install(
+    codex: str, hooks_file: Path, cwd: Path, base_dir: str | None = None, *, default_home: bool = False
+) -> None:
     codex = str(Path(shutil.which(codex) or codex).resolve())
     base = Layout.default("codex", base_dir or "~/.memu/hosts/codex").base.resolve()
     command = _command() + " --base-dir " + _quote(str(base))
     memorize = (
         _command("memorize-hook")
-        + " --agent "
-        + _quote(codex)
         + " --base-dir "
         + _quote(str(base))
         + " --session-dir "
         + _quote(str(hooks_file.parent / "sessions"))
     )
+    if default_home:
+        command += " --default-home"
+        memorize += " --default-home"
     if hooks_file.exists() and not hooks_file.is_file():
         raise FileNotFoundError(f"Codex hooks path is not a file: {hooks_file}")  # noqa: TRY003
 
@@ -253,16 +294,17 @@ def install(codex: str, hooks_file: Path, cwd: Path, base_dir: str | None = None
 
 def register(sub: Any) -> None:
     parser = sub.add_parser("install-prompt-hook", help="Register and trust Codex retrieval and memorization hooks")
-    parser.add_argument("--codex", default=shutil.which("codex"), help="Codex CLI executable (default: PATH)")
+    parser.add_argument("--codex", default=None, help="Standalone Codex CLI executable")
     codex_home = Path(os.environ.get("CODEX_HOME") or "~/.codex").expanduser()
     parser.add_argument("--hooks-file", type=Path, default=codex_home / "hooks.json")
     parser.add_argument("--cwd", type=Path, default=Path.cwd())
     parser.add_argument("--base-dir", default=None)
 
     async def handler(args: argparse.Namespace) -> int:
-        if not args.codex:
-            raise FileNotFoundError("Codex CLI is not on PATH; pass --codex with its executable path")  # noqa: TRY003
-        install(args.codex, args.hooks_file.expanduser().resolve(), args.cwd.resolve(), args.base_dir)
+        prepared = cli_prepare.prepare(args.codex)
+        if prepared["status"] != "passed":
+            raise RuntimeError(prepared["detail"])
+        install(prepared["executable"], args.hooks_file.expanduser().resolve(), args.cwd.resolve(), args.base_dir)
         return 0
 
     parser.set_defaults(handler=handler)
