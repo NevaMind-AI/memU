@@ -65,7 +65,7 @@ def _discover(executable: str | None) -> Path | None:
         return Path(found).resolve()
     # Desktop can prepend its own binary directory to PATH; search remaining entries.
     if found:
-        paths = [entry for entry in os.get_exec_path() if not _desktop_binary(Path(entry) / name)]
+        paths = [entry for entry in os.get_exec_path() if not _desktop_binary((Path(entry) / name).resolve())]
         alternative = shutil.which("codex", path=os.pathsep.join(paths))
         if alternative and not _desktop_binary(Path(alternative).resolve()):
             return Path(alternative).resolve()
@@ -113,7 +113,13 @@ def _install() -> None:
         print(text("📦 正在运行官方安装器，下载和安装可能需要几分钟……"), file=sys.stderr, flush=True)
         # Keep installer diagnostics separate from the command's optional JSON result.
         subprocess.run(  # noqa: S603
-            argv, stdin=subprocess.DEVNULL, stdout=sys.stderr, stderr=sys.stderr, timeout=300, check=True
+            argv,
+            stdin=subprocess.DEVNULL,
+            stdout=sys.stderr,
+            stderr=sys.stderr,
+            env={**os.environ, "CODEX_NON_INTERACTIVE": "1"},
+            timeout=300,
+            check=True,
         )
 
 

@@ -32,7 +32,9 @@ storing its versioned path. If it is missing, retrieval falls back to the origin
 query and background memorization reports failure without starting a worker.
 Desktop-bundled executables are excluded; a missing standalone CLI is
 installed through the official installer. Query extraction uses the same discovery
-rules, prioritizing the standalone installation directory over PATH.
+rules, prioritizing the standalone installation directory over PATH. On macOS/Linux,
+that directory is `CODEX_INSTALL_DIR` or `~/.local/bin`; the official `install.sh`
+runs with `CODEX_NON_INTERACTIVE=1` so it does not prompt through `/dev/tty`.
 It prints progress and elapsed time for the whole installation. Honor user-supplied
 `--codex PATH`, `--base-dir` and `--cwd` options.
 

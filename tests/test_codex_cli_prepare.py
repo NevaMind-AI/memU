@@ -6,6 +6,7 @@ import subprocess
 import urllib.error
 from email.message import Message
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -119,6 +120,7 @@ def test_official_installer_invocation(monkeypatch, platform):
         assert kwargs["timeout"] == 300
         assert kwargs["check"] is True
         assert kwargs["stdin"] == subprocess.DEVNULL
+        assert kwargs["env"]["CODEX_NON_INTERACTIVE"] == "1"
         if platform == "win32":
             assert argv[:6] == [
                 "powershell.exe",
@@ -245,3 +247,41 @@ def test_desktop_only_environment_installs_standalone_cli(environment, monkeypat
     assert result["status"] == "passed"
     assert result["executable"] == str((environment / "codex.exe").resolve())
     assert calls == ["installed"]
+
+
+@pytest.mark.parametrize("platform", ["linux", "darwin"])
+def test_runtime_find_uses_unix_official_directory(tmp_path, monkeypatch, platform):
+    monkeypatch.setattr(setup, "sys", SimpleNamespace(platform=platform))
+    monkeypatch.setattr(setup.Path, "home", lambda: tmp_path)
+    monkeypatch.delenv("CODEX_INSTALL_DIR", raising=False)
+    binary = tmp_path / ".local/bin/codex"
+    binary.parent.mkdir(parents=True)
+    binary.touch()
+    monkeypatch.setattr(setup.shutil, "which", lambda *a, **kw: pytest.fail("Official directory precedes PATH"))
+    assert setup.find_executable() == binary.resolve()
+
+
+@pytest.mark.parametrize("platform", ["win32", "linux", "darwin"])
+def test_path_alias_to_desktop_does_not_hide_later_standalone(environment, monkeypatch, platform):
+    monkeypatch.setattr(setup, "sys", SimpleNamespace(platform=platform))
+    name = "codex.exe" if platform == "win32" else "codex"
+    alias = environment / "desktop-alias"
+    tools = environment / "tools"
+    desktop = environment / "Applications/Codex.app/Contents/Resources" / name
+    binary = tools / name
+    tools.mkdir()
+    binary.touch()
+    resolve = Path.resolve
+
+    def resolve_alias(path, *args, **kwargs):
+        return desktop if path == alias / name else resolve(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "resolve", resolve_alias)
+    monkeypatch.setattr(setup.os, "get_exec_path", lambda: [str(alias), str(tools)])
+
+    def which(command, path=None):
+        assert command == "codex"
+        return str(alias / name) if path is None or str(alias) in path else str(binary)
+
+    monkeypatch.setattr(setup.shutil, "which", which)
+    assert setup.find_executable() == resolve(binary)
