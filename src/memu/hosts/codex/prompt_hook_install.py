@@ -235,8 +235,6 @@ def install(
     command = _command() + " --base-dir " + _quote(str(base))
     memorize = (
         _command("memorize-hook")
-        + " --agent "
-        + _quote(codex)
         + " --base-dir "
         + _quote(str(base))
         + " --session-dir "

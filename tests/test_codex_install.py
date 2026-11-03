@@ -68,7 +68,7 @@ def test_registered_handlers_use_default_home_in_child_environment(machine, monk
 
         monkeypatch.setattr(memorize_hook.notify_console, "launch_background", launch)
         monkeypatch.setattr(memorize_hook, "_startup_snapshot", lambda path: {"status": "started"})
-        options += ["--agent", "fixture-codex"]
+        monkeypatch.setattr(memorize_hook.cli_prepare, "_discover", lambda _: tmp_path / "codex.exe")
     assert main(options) == 0
     assert observed == [str(tmp_path / ".codex")]
 

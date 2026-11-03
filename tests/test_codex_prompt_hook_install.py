@@ -86,6 +86,7 @@ def test_install_merges_hook_trusts_and_preserves_unrelated_config(tmp_path, mon
     all_hooks = [hook for group in config["hooks"]["UserPromptSubmit"] for hook in group["hooks"]]
     assert len(all_hooks) == 3
     assert "memorize-hook" in all_hooks[-1]["command"]
+    assert "--agent" not in all_hooks[-1]["command"]
     assert str(base) in all_hooks[-1]["command"]
     assert config["other"] == {"preserved": True}
     assert len(entries) == 2

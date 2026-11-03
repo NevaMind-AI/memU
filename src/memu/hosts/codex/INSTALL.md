@@ -27,7 +27,10 @@ memu-codex install --non-interactive --install-missing --json --language LANG
 
 The CLI reuses the existing backend, runs doctor, prepares the standalone Codex CLI,
 registers and verifies both memory hooks, and cleans up recognized legacy retrieval
-entries. Desktop-bundled executables are excluded; a missing standalone CLI is
+entries. Both hooks discover the current standalone CLI when needed instead of
+storing its versioned path. If it is missing, retrieval falls back to the original
+query and background memorization reports failure without starting a worker.
+Desktop-bundled executables are excluded; a missing standalone CLI is
 installed through the official installer. Query extraction uses the same discovery
 rules, prioritizing the standalone installation directory over PATH.
 It prints progress and elapsed time for the whole installation. Honor user-supplied
