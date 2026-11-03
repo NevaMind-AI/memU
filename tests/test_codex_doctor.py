@@ -77,6 +77,7 @@ async def test_backend_and_integration_checks_are_independent(
 
     calls = []
     monkeypatch.setattr(host_cli, "_cmd_backend_doctor", backend)
+
     def integration():
         calls.append("integration")
         return integration_status
