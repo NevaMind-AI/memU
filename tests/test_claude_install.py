@@ -271,18 +271,59 @@ def test_missing_cli_installs_only_with_opt_in(tmp_path, monkeypatch, allowed):
         assert calls == []
 
 
-@pytest.mark.parametrize("logged_in", [False, True])
-def test_auth_status_is_read_only_and_clears_frontend_marker(tmp_path, monkeypatch, logged_in):
+@pytest.mark.parametrize(
+    ("logged_in", "method", "provider"),
+    [
+        (False, "none", "firstParty"),
+        (True, "oauth_token", "firstParty"),
+        (True, "api_key", "firstParty"),
+        (True, "api_key_helper", "firstParty"),
+        (True, "third_party", "bedrock"),
+        (True, "third_party", "vertex"),
+        (True, "third_party", "foundry"),
+    ],
+)
+def test_auth_status_is_read_only_and_clears_frontend_marker(tmp_path, monkeypatch, logged_in, method, provider):
     monkeypatch.setenv("CLAUDECODE", "frontend")
 
     def probe(argv, **kwargs):
         assert argv[1:] == ["auth", "status", "--json"]
         assert "CLAUDECODE" not in kwargs["env"]
         assert kwargs["stdin"] == subprocess.DEVNULL
-        return subprocess.CompletedProcess(argv, 0 if logged_in else 1, json.dumps({"loggedIn": logged_in}), "")
+        return subprocess.CompletedProcess(
+            argv,
+            0 if logged_in else 1,
+            json.dumps({"loggedIn": logged_in, "authMethod": method, "apiProvider": provider}),
+            "",
+        )
 
     monkeypatch.setattr(cli_prepare.subprocess, "run", probe)
     assert cli_prepare.auth_status(tmp_path / "claude.exe") is logged_in
+
+
+@pytest.mark.parametrize("authentication", [True, False, "error"])
+def test_doctor_distinguishes_authentication_from_cli_startup(machine, monkeypatch, capsys, authentication):
+    hook_install.install(machine[1])
+
+    def auth_status(executable):
+        if authentication == "error":
+            raise ValueError("private provider diagnostic")  # noqa: TRY003
+        return authentication
+
+    monkeypatch.setattr(cli_prepare, "auth_status", auth_status)
+    assert doctor.check() == (0 if authentication is True else 1)
+    output = capsys.readouterr().out
+    assert "claude-cli ok" in output
+    assert "claude-cli failed" not in output
+    assert "private provider diagnostic" not in output
+    if authentication is True:
+        assert "authentication configured" in output
+        assert "credentials and provider access unverified" in output
+    elif authentication is False:
+        assert "authentication missing" in output
+        assert "cc-switch" in output
+    else:
+        assert "authentication check failed" in output
 
 
 def test_uninstall_keeps_compound_commands_and_unrelated_empty_groups(machine, capsys):

@@ -12,14 +12,21 @@ def check() -> int:
     try:
         executable = cli_prepare.prepare()
         print(f"claude-cli ok ({executable})")
-        if cli_prepare.auth_status(executable):
-            print("authentication ok (CLI status; no model request)")
-        else:
-            print("authentication missing; run `claude auth login` or configure provider credentials")
-            failed = True
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
         print(f"claude-cli failed: {type(exc).__name__}; run install to diagnose or repair")
         failed = True
+    else:
+        try:
+            if cli_prepare.auth_status(executable):
+                print("authentication configured (CLI status; credentials and provider access unverified)")
+            else:
+                print(
+                    "authentication missing; configure provider credentials (for example, with cc-switch) or run `claude auth login`"
+                )
+                failed = True
+        except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
+            print(f"authentication check failed: {type(exc).__name__}; inspect `claude auth status --json`")
+            failed = True
     try:
         issues = hook_install.problems()
         for issue in issues:
