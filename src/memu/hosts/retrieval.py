@@ -36,9 +36,19 @@ CONTEXT_PREFIX = (
 )
 
 
-def render_context(memories: dict[str, Any]) -> str:
-    """Render the shared retrieval guidance and reference data for host hooks."""
-    return CONTEXT_PREFIX + json.dumps(memories, ensure_ascii=False, separators=(",", ":"))
+def render_context(memories: dict[str, Any], *, original: dict[str, Any] | None = None) -> str:
+    """Render shared guidance, retrieval data and context delivery counts."""
+    original = memories if original is None else original
+    payload = {
+        **memories,
+        "context_counts": {
+            "returned": {layer: len(memories.get(layer, [])) for layer in ("hits", "resources")},
+            "omitted": {
+                layer: len(original.get(layer, [])) - len(memories.get(layer, [])) for layer in ("hits", "resources")
+            },
+        },
+    }
+    return CONTEXT_PREFIX + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
 
 
 async def retrieve(

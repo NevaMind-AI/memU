@@ -29,7 +29,7 @@ def bounded_context(memories: dict[str, Any], trace: dict[str, Any]) -> str | No
         selected["retrieval_status"] = memories["retrieval_status"]
 
     def render() -> str:
-        return render_context(selected)
+        return render_context(selected, original=memories)
 
     def units(text: str) -> int:
         # Count JavaScript string units conservatively: emoji can consume two.

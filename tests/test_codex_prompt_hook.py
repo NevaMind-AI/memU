@@ -83,7 +83,11 @@ def test_prompt_hook_preserves_query_and_logs(tmp_path, monkeypatch, capsys, out
             "query_kind": "short",
         }
         assert "memU retrieval completed" in context
-        assert final["retrieve_result"] == json.loads(context.splitlines()[-1])
+        result = json.loads(context.splitlines()[-1])
+        assert result == {
+            **final["retrieve_result"],
+            "context_counts": {"returned": {"hits": 1, "resources": 0}, "omitted": {"hits": 0, "resources": 0}},
+        }
         assert final["status"] == "context_returned"
         assert final["counts"] == {"hits": 1, "resources": 0}
     elif outcome not in ("empty", "filtered"):
@@ -94,6 +98,10 @@ def test_prompt_hook_preserves_query_and_logs(tmp_path, monkeypatch, capsys, out
         context = json.loads(output.out)["hookSpecificOutput"]["additionalContext"]
         result = json.loads(context.rsplit("\n", 1)[1])
         assert result["hits"] == result["resources"] == []
+        assert result["context_counts"] == {
+            "returned": {"hits": 0, "resources": 0},
+            "omitted": {"hits": 0, "resources": 0},
+        }
         assert result.get("retrieval_status", {}).get("filtered_segments", 0) == 5 * (outcome == "filtered")
         assert "completed successfully" in context
         assert final["status"] == "empty_result"

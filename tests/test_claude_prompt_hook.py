@@ -11,24 +11,27 @@ import pytest
 
 from memu.hosts.claude_code import prompt_hook as hook
 from memu.hosts.claude_code.cli import main
+from memu.hosts.retrieval import render_context
 
 
 def test_exact_boundary_keeps_complete_entry() -> None:
-    empty = hook.CONTEXT_PREFIX + json.dumps(
-        {"hits": [{"text": ""}], "resources": []}, ensure_ascii=False, separators=(",", ":")
+    empty = render_context(
+        {"hits": [{"text": ""}], "resources": []},
+        original={"hits": [{"text": ""}, {"text": "extra"}], "resources": []},
     )
     exact = {"text": "a" * (hook.CONTEXT_BUDGET - len(empty))}
     trace: dict = {}
     context = hook.bounded_context({"hits": [exact, {"text": "extra"}], "resources": []}, trace)
     assert context is not None
     assert trace["context_utf16_units"] == hook.CONTEXT_BUDGET
-    assert json.loads(context[len(hook.CONTEXT_PREFIX) :]) == {"hits": [exact], "resources": []}
+    result = json.loads(context[len(hook.CONTEXT_PREFIX) :])
+    assert result["hits"] == [exact]
+    assert result["resources"] == []
+    assert result["context_counts"] == {"returned": {"hits": 1, "resources": 0}, "omitted": {"hits": 1, "resources": 0}}
     assert trace["omitted_counts"] == {"hits": 1, "resources": 0}
 
 
 def test_status_is_preserved_within_the_whole_context_budget() -> None:
-    from memu.hosts.retrieval import render_context
-
     status = {
         "status": "succeeded",
         "query_kind": "short",
@@ -41,7 +44,10 @@ def test_status_is_preserved_within_the_whole_context_budget() -> None:
     payload = {"hits": [{"text": "😀" * 6000}], "resources": [], "retrieval_status": status}
     trace: dict = {}
     context = hook.bounded_context(payload, trace)
-    assert context == render_context({"hits": [], "resources": [], "retrieval_status": status})
+    assert context == render_context({"hits": [], "resources": [], "retrieval_status": status}, original=payload)
+    result = json.loads(context[len(hook.CONTEXT_PREFIX) :])
+    assert result["retrieval_status"]["returned_hits"] == 1
+    assert result["context_counts"] == {"returned": {"hits": 0, "resources": 0}, "omitted": {"hits": 1, "resources": 0}}
     assert trace["omitted_counts"] == {"hits": 1, "resources": 0}
     assert trace["context_utf16_units"] <= hook.CONTEXT_BUDGET
 
@@ -54,7 +60,10 @@ def test_oversized_entries_do_not_block_later_hits_or_resources() -> None:
         {"hits": [{"text": "😀" * 6000}, small], "resources": [{"caption": "x" * 10000}, resource]}, trace
     )
     assert context is not None
-    assert json.loads(context[len(hook.CONTEXT_PREFIX) :]) == {"hits": [small], "resources": [resource]}
+    result = json.loads(context[len(hook.CONTEXT_PREFIX) :])
+    assert result["hits"] == [small]
+    assert result["resources"] == [resource]
+    assert result["context_counts"] == {"returned": {"hits": 1, "resources": 1}, "omitted": {"hits": 1, "resources": 1}}
     assert trace["context_utf16_units"] <= hook.CONTEXT_BUDGET
     assert trace["context_utf16_units"] > trace["context_chars"]
     assert trace["returned_counts"] == {"hits": 1, "resources": 1}
