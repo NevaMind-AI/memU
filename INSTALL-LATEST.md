@@ -103,7 +103,7 @@ A bare "yes" / "ok" means **Use this version** — default to proceeding.
 ## Step 4 — set up memU
 
 You now have the latest binaries. Identify **which agent you are** and use its
-binary — memU has nine host adapters:
+binary — memU has ten host adapters:
 
 | You are | Your binary |
 | --- | --- |
@@ -115,6 +115,7 @@ binary — memU has nine host adapters:
 | WorkBuddy | `memu-workbuddy` |
 | Cola | `memu-cola` |
 | pi | `memu-pi` |
+| DeepSeek Harness (DSH) | `memu-dsh` (plus the `dsh-memu` plugin from the same checkout) |
 | anything else | `memu-agent` — run `memu-agent detect` if unsure |
 
 Then print your host's packaged guide and follow it to the letter:
