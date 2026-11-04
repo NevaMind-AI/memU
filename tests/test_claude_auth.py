@@ -96,7 +96,7 @@ def test_input_end_returns_blocked_without_changes(machine, monkeypatch, capsys)
 def test_chinese_menu_is_scoped_to_invocation(machine, monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", lambda _: "4")
     assert main(["auth", "--language", "zh"]) == 2
-    assert "使用 Claude 账号登录" in capsys.readouterr().out
+    assert "   1. Claude 账号登录" in capsys.readouterr().out
     assert main(["auth"]) == 2
     assert "Claude account login" in capsys.readouterr().out
 

@@ -18,7 +18,7 @@ from memu.hosts.install_language import LANGUAGE, text
 
 
 def _provider() -> None:
-    endpoint = input(text("API 地址：")).strip()
+    endpoint = input(text("   API 地址：")).strip()
     url = urlsplit(endpoint)
     if (
         url.scheme not in {"http", "https"}
@@ -29,10 +29,10 @@ def _provider() -> None:
         or url.fragment
     ):
         raise installation.Blocked("Enter an HTTP(S) endpoint without credentials, query or fragment.")
-    kind = input(text("凭据类型 [api-key/token]（默认 api-key）：")).strip() or "api-key"
+    kind = input(text("   凭据类型 [api-key/token]（默认 api-key）：")).strip() or "api-key"
     if kind not in {"api-key", "token"}:
         raise installation.Blocked("Choose api-key or token.")
-    secret = getpass.getpass(text("API key / token（明文保存到 ~/.claude/settings.json）：")).strip()
+    secret = getpass.getpass(text("   凭据（明文保存到 ~/.claude/settings.json）：")).strip()
     if not secret:
         raise installation.Blocked("No credential supplied; configuration was not changed.")
     lock = hook_install.home() / ".memu-hooks-lock"
@@ -65,12 +65,13 @@ def configure(executable: Path, *, method: str | None, non_interactive: bool) ->
     if method is None:
         print(
             text(
-                "后台记忆需要 Claude CLI 认证。\n1. 使用 Claude 账号登录\n2. 输入 API key / token 和服务地址\n3. 使用 cc-switch 等外部工具配置，完成后重新检查\n4. 稍后配置"
+                "\n   🔐  配置认证\n   1. Claude 账号登录\n   2. 输入 API key / token\n   3. cc-switch 等外部工具\n   4. 稍后配置"
             )
         )
         method = {"1": "login", "2": "provider", "3": "external", "4": "later"}.get(
-            input(text("认证方式 [1/2/3/4]：")).strip()
+            input(text("   请选择 [1/2/3/4]：")).strip()
         )
+    print()
     if method == "later":
         raise installation.Blocked("认证已暂缓；后台记忆尚不可用。稍后运行 `memu-claude-code auth`，再重新安装。")
     if method == "login":
@@ -82,9 +83,10 @@ def configure(executable: Path, *, method: str | None, non_interactive: bool) ->
     elif method == "provider":
         _provider()
     elif method == "external":
-        input(text("请自行使用 cc-switch 等工具完成配置，然后按回车重新检查："))
+        input(text("   请在 cc-switch 等工具中完成配置，按回车重新检查："))
     else:
         raise installation.Blocked("请选择 login、provider、external 或 later。")
+    print()
     if not cli_prepare.auth_status(executable):
         raise installation.Blocked(
             "Claude still reports no authentication. Run `memu-claude-code auth` to retry; background memory is not ready."
