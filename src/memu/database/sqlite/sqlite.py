@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
 from pydantic import BaseModel
@@ -25,6 +27,7 @@ from memu.database.sqlite.repositories.resource_repo import SQLiteResourceRepo
 from memu.database.sqlite.schema import SQLiteSQLAModels, get_sqlite_sqlalchemy_models
 from memu.database.sqlite.session import SQLiteSessionManager
 from memu.database.state import DatabaseState
+from memu.database.transaction import preserve_state
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +121,16 @@ class SQLiteStore(Database):
         # Also create tables from our custom metadata
         self._sqla_models.Base.metadata.create_all(self._sessions.engine)
         logger.debug("SQLite tables created/verified")
+
+    @contextmanager
+    def atomic(self) -> Iterator[None]:
+        with preserve_state(self._state), self._sessions.atomic():
+            yield
+
+    @contextmanager
+    def snapshot(self) -> Iterator[None]:
+        with self._sessions.snapshot():
+            yield
 
     def close(self) -> None:
         """Close the database connection and release resources."""

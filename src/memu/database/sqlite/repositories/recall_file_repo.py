@@ -189,7 +189,7 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
         where: dict[str, Any] = {"name": name, "track": track, **user_data}
         with self._sessions.session() as session:
             stmt = select(self._recall_file_model)
-            filters = self._build_filters(self._recall_file_model, where)
+            filters = [getattr(self._recall_file_model, key) == value for key, value in where.items()]
             if filters:
                 stmt = stmt.where(*filters)
             existing = session.exec(stmt).first()

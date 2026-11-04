@@ -9,6 +9,7 @@ from typing import Any
 
 import pendulum
 
+from memu.database.filters import matches_where
 from memu.database.sqlite.session import SQLiteSessionManager
 from memu.database.state import DatabaseState
 
@@ -90,7 +91,9 @@ class SQLiteRepoBase:
             if column is None:
                 msg = f"Unknown filter field '{field}' for model '{model.__name__}'"
                 raise ValueError(msg)
-            if op == "in":
+            if op == "isnull":
+                filters.append(column.is_(None) if expected else column.is_not(None))
+            elif op == "in":
                 if isinstance(expected, str):
                     filters.append(column == expected)
                 else:
@@ -102,27 +105,7 @@ class SQLiteRepoBase:
     @staticmethod
     def _matches_where(obj: Any, where: Mapping[str, Any] | None) -> bool:
         """Check if object matches where clause (for in-memory filtering)."""
-        if not where:
-            return True
-        for raw_key, expected in where.items():
-            if expected is None:
-                continue
-            field, op = [*raw_key.split("__", 1), None][:2]
-            actual = getattr(obj, str(field), None)
-            if op == "in":
-                if isinstance(expected, str):
-                    if actual != expected:
-                        return False
-                else:
-                    try:
-                        if actual not in expected:
-                            return False
-                    except TypeError:
-                        return False
-            else:
-                if actual != expected:
-                    return False
-        return True
+        return matches_where(obj, where)
 
 
 __all__ = ["SQLiteRepoBase"]

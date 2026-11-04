@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
 from pydantic import BaseModel
@@ -23,6 +25,7 @@ from memu.database.repositories import (
     ResourceRepo,
 )
 from memu.database.state import DatabaseState
+from memu.database.transaction import preserve_state
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +98,16 @@ class PostgresStore(Database):
         self.segments = self._state.segments
 
         # self._load_existing()
+
+    @contextmanager
+    def atomic(self) -> Iterator[None]:
+        with preserve_state(self._state), self._sessions.atomic():
+            yield
+
+    @contextmanager
+    def snapshot(self) -> Iterator[None]:
+        with self._sessions.snapshot():
+            yield
 
     def close(self) -> None:
         self._sessions.close()

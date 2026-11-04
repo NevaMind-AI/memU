@@ -91,6 +91,12 @@ Once the scheduled bridging task is installed, memU can turn useful agent histor
 3. **Let the agent decide.** The agent reads related existing skills, then chooses to do nothing, patch an existing skill, or create a new one.
 4. **Write readable skill Markdown.** Each skill has a name, description, and reusable workflow, including useful branches, edge cases, and pitfalls.
 5. **Commit and index.** `commit` submits changed skill files through `commit_results`; memU embeds the skill name and description and stores it under the `skill` track.
+
+Commits publish resources, recall files, and their search segments as one storage
+transaction. Concurrent commits recheck the current state before writing; failed
+storage writes leave the prior batch intact. Writes use the exact supplied user
+and agent scope, while omitted fields in retrieval filters still search across
+those scopes.
 6. **Retrieve it later.** On a similar future task, memU returns the relevant skill so any connected agent can use the learned workflow.
 
 The judgment and synthesis stay inside the agent. `MemoryService` makes no LLM or chat calls; it stores, embeds, and retrieves the skill Markdown the agent prepared.
