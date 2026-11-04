@@ -19,6 +19,22 @@ from memu.hosts import cli_install
 from memu.hosts.install_language import text
 
 
+def standalone_env() -> dict[str, str]:
+    """Use user authentication rather than the invoking Desktop host's auth bridge."""
+    env = os.environ.copy()
+    for name in list(env):
+        if name.startswith("CLAUDE_CODE_HOST_") or name in {
+            "CLAUDECODE",
+            "CLAUDE_CODE_CHILD_SESSION",
+            "CLAUDE_CODE_SESSION_ID",
+            "CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST",
+            "CLAUDE_CODE_SDK_HAS_HOST_AUTH_REFRESH",
+        }:
+            env.pop(name)
+    env["CLAUDE_CONFIG_DIR"] = str(Path.home() / ".claude")
+    return env
+
+
 def _desktop_binary(path: Path) -> bool:
     value = str(path).replace("\\", "/").casefold()
     return (
@@ -102,9 +118,7 @@ def verify_request(executable: Path) -> None:
     """Check a real headless request without tools, hooks or local session history."""
     started = time.monotonic()
     print(text("   → Reply OK. · 等待回复（最多 60 秒）"), flush=True)
-    env = {**os.environ, "CLAUDE_CONFIG_DIR": str(Path.home() / ".claude"), "MEMU_CLAUDE_MEMORIZE": "1"}
-    env.pop("CLAUDECODE", None)
-    env.pop("CLAUDE_CODE_SESSION_ID", None)
+    env = {**standalone_env(), "MEMU_CLAUDE_MEMORIZE": "1"}
     with tempfile.TemporaryDirectory(prefix="memu-claude-check-") as directory:
         result = subprocess.run(  # noqa: S603
             [
@@ -160,9 +174,7 @@ def verify_request(executable: Path) -> None:
 
 def auth_status(executable: Path) -> bool:
     """Read CLI authentication status without a model turn or exposing credentials."""
-    env = os.environ.copy()
-    env.pop("CLAUDECODE", None)
-    env["CLAUDE_CONFIG_DIR"] = str(Path.home() / ".claude")
+    env = standalone_env()
     result = subprocess.run(  # noqa: S603
         [str(executable), "auth", "status", "--json"],
         capture_output=True,

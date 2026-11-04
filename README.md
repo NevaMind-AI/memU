@@ -140,9 +140,11 @@ Installation is the one-message setup in [Quick start](#quick-start) or [Self-ho
 Afterwards `<binary> doctor` proves the whole loop resolves: config, selected
 mode, and a live retrieval.
 
-For Claude Code background memory, `memu-claude-code auth` checks existing CLI
+For Claude Code background memory, `memu-claude-code auth` reuses existing CLI
 credentials or offers account login, manual API key / token entry, external
 configuration (such as cc-switch) followed by a recheck, and configuring later.
+Standalone CLI subprocesses use `~/.claude` and clear Desktop host authentication
+controls while retaining user credentials and provider settings.
 Use `--method login|provider|external|later` to select
 an option directly. API keys and tokens are entered without echo and saved in
 plaintext in `~/.claude/settings.json`. `--non-interactive` never opens login or

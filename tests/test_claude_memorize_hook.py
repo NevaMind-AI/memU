@@ -32,6 +32,8 @@ def test_submit_detaches_without_frontend_session(tmp_path, monkeypatch, capsys,
     monkeypatch.setattr(subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "foreground-session")
     monkeypatch.setenv("CLAUDECODE", "frontend")
+    monkeypatch.setenv("CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST", "1")
+    monkeypatch.setenv("CLAUDE_CODE_HOST_AUTH_ENV_VAR", "desktop-auth")
     monkeypatch.delenv(hook.BACKGROUND_ENV, raising=False)
     monkeypatch.setattr(sys, "stdin", io.StringIO('{"hook_event_name":"UserPromptSubmit"}'))
     calls = []
@@ -54,6 +56,8 @@ def test_submit_detaches_without_frontend_session(tmp_path, monkeypatch, capsys,
     assert argv[argv.index("--agent") + 1] == str(tmp_path / "claude.exe")
     assert "CLAUDE_CODE_SESSION_ID" not in kwargs["env"]
     assert "CLAUDECODE" not in kwargs["env"]
+    assert "CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST" not in kwargs["env"]
+    assert "CLAUDE_CODE_HOST_AUTH_ENV_VAR" not in kwargs["env"]
     assert kwargs["creationflags"] == (0x08000000 if platform == "win32" else 0)
     assert kwargs["start_new_session"] == (platform != "win32")
     assert all(kwargs[name] == subprocess.DEVNULL for name in ("stdin", "stdout", "stderr"))
@@ -89,6 +93,8 @@ def test_launch_failure_fails_open(tmp_path, monkeypatch, capsys):
 def test_agent_receives_fresh_session_and_guard_before_start(tmp_path, monkeypatch):
     monkeypatch.setenv(hook.SESSION_ENV, "foreground-session")
     monkeypatch.setenv("CLAUDECODE", "frontend")
+    monkeypatch.setenv("CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST", "1")
+    monkeypatch.setenv("CLAUDE_CODE_HOST_AUTH_ENV_VAR", "desktop-auth")
     monkeypatch.delenv(hook.BACKGROUND_ENV, raising=False)
     layout = Layout.default("claude-code", tmp_path)
     calls = []
@@ -102,6 +108,8 @@ def test_agent_receives_fresh_session_and_guard_before_start(tmp_path, monkeypat
         assert env[hook.SESSION_ENV] == session_id
         assert env[hook.BACKGROUND_ENV] == "1"
         assert "CLAUDECODE" not in env
+        assert "CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST" not in env
+        assert "CLAUDE_CODE_HOST_AUTH_ENV_VAR" not in env
         assert env["CLAUDE_CONFIG_DIR"] == str(Path.home() / ".claude")
         assert "memu-claude-code prepare or commit" in prompt
         calls.append(argv)

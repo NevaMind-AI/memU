@@ -373,6 +373,8 @@ def test_missing_cli_installs_only_with_opt_in(tmp_path, monkeypatch, allowed):
     ],
 )
 def test_auth_status_is_read_only_and_clears_frontend_marker(tmp_path, monkeypatch, logged_in, method, provider):
+    monkeypatch.setenv("CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST", "1")
+    monkeypatch.setenv("CLAUDE_CODE_HOST_AUTH_ENV_VAR", "desktop-auth")
     monkeypatch.setenv("CLAUDECODE", "frontend")
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "redirected"))
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -380,6 +382,8 @@ def test_auth_status_is_read_only_and_clears_frontend_marker(tmp_path, monkeypat
     def probe(argv, **kwargs):
         assert argv[1:] == ["auth", "status", "--json"]
         assert "CLAUDECODE" not in kwargs["env"]
+        assert "CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST" not in kwargs["env"]
+        assert "CLAUDE_CODE_HOST_AUTH_ENV_VAR" not in kwargs["env"]
         assert kwargs["env"]["CLAUDE_CONFIG_DIR"] == str(tmp_path / ".claude")
         assert kwargs["stdin"] == subprocess.DEVNULL
         return subprocess.CompletedProcess(

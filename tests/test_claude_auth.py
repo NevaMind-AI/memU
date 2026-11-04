@@ -45,11 +45,15 @@ def test_login_uses_default_home_and_rechecks(machine, monkeypatch, success):
     monkeypatch.setattr(cli_prepare, "auth_status", lambda _: next(states))
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", "elsewhere")
     monkeypatch.setenv("CLAUDECODE", "frontend")
+    monkeypatch.setenv("CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST", "1")
+    monkeypatch.setenv("CLAUDE_CODE_HOST_AUTH_ENV_VAR", "desktop-auth")
 
     def login(argv, **kwargs):
         assert argv[1:] == ["auth", "login"]
         assert kwargs["env"]["CLAUDE_CONFIG_DIR"] == str(machine.parent)
         assert "CLAUDECODE" not in kwargs["env"]
+        assert "CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST" not in kwargs["env"]
+        assert "CLAUDE_CODE_HOST_AUTH_ENV_VAR" not in kwargs["env"]
         return subprocess.CompletedProcess(argv, 0)
 
     monkeypatch.setattr(auth.subprocess, "run", login)

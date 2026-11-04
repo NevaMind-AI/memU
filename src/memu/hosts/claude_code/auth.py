@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import getpass
-import os
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -75,8 +74,7 @@ def configure(executable: Path, *, method: str | None, non_interactive: bool) ->
     if method == "later":
         raise installation.Blocked("认证已暂缓；后台记忆尚不可用。稍后运行 `memu-claude-code auth`，再重新安装。")
     if method == "login":
-        env = {**os.environ, "CLAUDE_CONFIG_DIR": str(hook_install.home())}
-        env.pop("CLAUDECODE", None)
+        env = cli_prepare.standalone_env()
         result = subprocess.run([str(executable), "auth", "login"], env=env, check=False)  # noqa: S603
         if result.returncode:
             raise installation.Blocked("Claude 登录未完成；请重新运行 `memu-claude-code auth`。")
