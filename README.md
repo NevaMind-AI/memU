@@ -144,7 +144,10 @@ For Claude Code background memory, `memu-claude-code auth` reuses existing CLI
 credentials or offers account login, manual API key / token entry, external
 configuration (such as cc-switch) followed by a recheck, and configuring later.
 Standalone CLI subprocesses use `~/.claude` and clear Desktop host authentication
-controls while retaining user credentials and provider settings.
+and session metadata. When invoked from Desktop, they also discard its inherited
+gateway URL and model routing so the standalone CLI loads its own user settings.
+User credentials and proxy settings are retained; provider environment overrides
+are retained when invoked outside Desktop.
 Use `--method login|provider|external|later` to select
 an option directly. API keys and tokens are entered without echo and saved in
 plaintext in `~/.claude/settings.json`. `--non-interactive` never opens login or

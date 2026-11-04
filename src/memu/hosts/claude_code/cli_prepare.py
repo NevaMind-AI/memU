@@ -20,16 +20,33 @@ from memu.hosts.install_language import text
 
 
 def standalone_env() -> dict[str, str]:
-    """Use user authentication rather than the invoking Desktop host's auth bridge."""
+    """Load standalone configuration without inheriting Desktop authentication/routing."""
     env = os.environ.copy()
+    desktop = env.get("CLAUDE_CODE_ENTRYPOINT", "").startswith("claude-desktop")
     for name in list(env):
-        if name.startswith("CLAUDE_CODE_HOST_") or name in {
-            "CLAUDECODE",
-            "CLAUDE_CODE_CHILD_SESSION",
-            "CLAUDE_CODE_SESSION_ID",
-            "CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST",
-            "CLAUDE_CODE_SDK_HAS_HOST_AUTH_REFRESH",
-        }:
+        desktop_route = desktop and (
+            name in {"ANTHROPIC_BASE_URL", "ANTHROPIC_MODEL"}
+            or (name.startswith("ANTHROPIC_DEFAULT_") and name.endswith("_MODEL"))
+        )
+        if (
+            desktop_route
+            or name.startswith("CLAUDE_CODE_HOST_")
+            or name
+            in {
+                "CLAUDECODE",
+                "CLAUDE_CODE_CHILD_SESSION",
+                "CLAUDE_CODE_SESSION_ID",
+                "CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST",
+                "CLAUDE_CODE_SDK_HAS_HOST_AUTH_REFRESH",
+                "CLAUDE_CODE_SDK_HAS_OAUTH_REFRESH",
+                "CLAUDE_CODE_OAUTH_SCOPES",
+                "CLAUDE_CODE_ENTRYPOINT",
+                "CLAUDE_CODE_EXECPATH",
+                "CLAUDE_CODE_ATTRIBUTION_HEADER",
+                "CLAUDE_CODE_DIAGNOSTICS_FILE",
+                "CLAUDE_PID",
+            }
+        ):
             env.pop(name)
     env["CLAUDE_CONFIG_DIR"] = str(Path.home() / ".claude")
     return env

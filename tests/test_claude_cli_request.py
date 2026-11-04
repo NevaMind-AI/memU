@@ -15,6 +15,8 @@ def test_standalone_environment_preserves_user_credentials_and_parent(tmp_path, 
         "ANTHROPIC_API_KEY": "user-key",
         "ANTHROPIC_AUTH_TOKEN": "user-token",
         "ANTHROPIC_BASE_URL": "https://provider.example",
+        "ANTHROPIC_MODEL": "user-model",
+        "ANTHROPIC_DEFAULT_OPUS_MODEL": "user-opus",
         "CLAUDE_CODE_OAUTH_TOKEN": "user-oauth",
         "HTTPS_PROXY": "https://proxy.example",
     }
@@ -35,6 +37,36 @@ def test_standalone_environment_preserves_user_credentials_and_parent(tmp_path, 
     assert all(env[key] == value for key, value in retained.items())
     assert all(key not in env for key in removed)
     assert all(cli_prepare.os.environ[key] == value for key, value in removed.items())
+
+
+@pytest.mark.parametrize("entrypoint", ["claude-desktop", "claude-desktop-3p"])
+def test_desktop_routing_does_not_override_saved_provider(tmp_path, monkeypatch, entrypoint):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    settings = tmp_path / ".claude/settings.json"
+    settings.parent.mkdir()
+    original = json.dumps({
+        "env": {"ANTHROPIC_BASE_URL": "https://provider.example", "ANTHROPIC_AUTH_TOKEN": "saved-token"}
+    })
+    settings.write_text(original)
+    desktop = {
+        "CLAUDE_CODE_ENTRYPOINT": entrypoint,
+        "CLAUDE_CODE_EXECPATH": "desktop/claude.exe",
+        "CLAUDE_CODE_SDK_HAS_OAUTH_REFRESH": "1",
+        "CLAUDE_CODE_OAUTH_SCOPES": "",
+        "CLAUDE_CODE_ATTRIBUTION_HEADER": "desktop",
+        "CLAUDE_CODE_DIAGNOSTICS_FILE": "desktop.log",
+        "CLAUDE_PID": "123",
+        "ANTHROPIC_BASE_URL": "http://localhost:1234/claude-desktop",
+        "ANTHROPIC_MODEL": "desktop-model",
+        "ANTHROPIC_DEFAULT_OPUS_MODEL": "desktop-opus",
+    }
+    for key, value in desktop.items():
+        monkeypatch.setenv(key, value)
+    env = cli_prepare.standalone_env()
+    assert all(key not in env for key in desktop)
+    assert env["CLAUDE_CONFIG_DIR"] == str(settings.parent)
+    assert settings.read_text() == original
+    assert all(cli_prepare.os.environ[key] == value for key, value in desktop.items())
 
 
 def test_visible_response_and_provider_error_are_redacted(tmp_path, monkeypatch, capsys):
