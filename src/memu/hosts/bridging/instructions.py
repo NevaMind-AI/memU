@@ -55,7 +55,20 @@ For the session as a whole, pick ONE of:
 
 You may combine (b) and (c) if the session warrants it.
 
+Keep information that is likely to remain useful in future sessions. Extract the
+lasting fact or lesson, rather than preserving the sequence of events or the
+temporary state of the current task.
+
 ## Step 3 — write the memory files
+
+Use prose or bullet points, not Markdown tables. Write each fact on one physical
+line as a complete, independently understandable statement: include its subject,
+what the value describes, and the necessary scope or conditions. Keep a fact on
+one line even when it is long. Include dates only when they establish validity or
+scope, or the user explicitly needs historical recall. Express comparisons as
+complete statements; do not use bare values or references such as "same as above".
+When patching a file that already has a table, write new or updated facts in this
+form rather than adding table rows. Preserve unrelated existing content.
 
 Write each memory file you create or patch to a path under `{track_dir}` with a
 meaningful kebab-case name (last write wins when patching). Every file you write
@@ -113,6 +126,11 @@ For the session as a whole, pick ONE of:
 You may combine (b) and (c) if the session warrants it.
 
 ## Step 3 — write the skills
+
+Use prose, bullet points, or numbered steps, not Markdown tables. Express each
+condition, action, and outcome with enough context to understand it independently.
+When patching a file that already has a table, write new or updated instructions
+in this form rather than adding table rows. Preserve unrelated existing content.
 
 Write each skill file you create or patch to a path under `{track_dir}` with a
 meaningful kebab-case name that describes the task family — not a placeholder
