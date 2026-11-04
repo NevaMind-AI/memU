@@ -8,8 +8,10 @@ from __future__ import annotations
 import argparse
 import shutil
 import subprocess
+import sys
 from typing import Any
 
+from memu.hosts import cli_install
 from memu.hosts import installation as lifecycle
 from memu.hosts.claude_code import auth, cli_prepare, hook_install
 from memu.hosts.hooks.admission import workspace_lock
@@ -49,12 +51,10 @@ def _prepare_host(args: argparse.Namespace) -> None:
             raise lifecycle.Blocked("Standalone Claude CLI required; rerun with --install-missing") from None
         executable = cli_prepare.prepare(install_missing=True)
     print(text("   Claude CLI：{path}", path=str(executable)), flush=True)
-    if shutil.which("claude") is None:
-        print(text("   提示：当前终端 PATH 中没有 claude；memU 将使用上面的绝对路径。"), flush=True)
-        print(
-            text("   如需直接运行 claude，请将此目录加入 PATH 并重新打开终端：{path}", path=str(executable.parent)),
-            flush=True,
-        )
+    missing_on_path = shutil.which("claude") is None
+    cli_install.configure_windows_path(executable)
+    if missing_on_path and sys.platform == "win32":
+        print(text("   PATH 已为后续终端配置；当前终端可使用上面的绝对路径，或重新打开终端运行 claude。"), flush=True)
     auth.configure(executable, method=args.auth, non_interactive=args.non_interactive)
     verify = args.test_cli
     if verify is None and not args.non_interactive:

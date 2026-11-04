@@ -8,6 +8,7 @@ from contextvars import ContextVar
 LANGUAGE: ContextVar[str] = ContextVar("host_install_language", default="en")
 
 _EN = {
+    "   PATH 已为后续终端配置；当前终端可使用上面的绝对路径，或重新打开终端运行 claude。": "   PATH is configured for future terminals; use the absolute path above now, or reopen your terminal to run claude.",
     "   → 请求：Reply OK.（禁用工具，不保存本地会话）": "   → Request: Reply OK. (tools disabled; no local session history)",
     "   … 等待 Claude 回复（最多 60 秒）": "   … Waiting for Claude (up to 60 seconds)",
     "   ← Claude 进程已返回，退出码 {code}，耗时 {seconds} 秒": "   ← Claude process returned: exit {code}, {seconds}s",

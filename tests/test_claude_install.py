@@ -32,6 +32,7 @@ def machine(tmp_path, monkeypatch):
     executable = tmp_path / "memu-claude-code.exe"
     executable.touch()
     monkeypatch.setattr(sys, "argv", [str(executable)])
+    monkeypatch.setattr(install.cli_install, "configure_windows_path", lambda _: None)
     monkeypatch.setattr(cli_prepare, "prepare", lambda *a, **k: tmp_path / "claude.exe")
     monkeypatch.setattr(cli_prepare, "auth_status", lambda _: True)
     calls = []
@@ -89,7 +90,8 @@ def test_missing_path_reports_selected_executable_before_request(machine, monkey
     assert invoke(machine, "--test-cli") == 0
     output = capsys.readouterr()
     assert "Claude CLI:" in output.err
-    assert "not on this terminal's PATH" in output.err
+    if sys.platform == "win32":
+        assert "PATH is configured for future terminals" in output.err
     assert output.err.index("Claude CLI:") < output.err.index("REQUEST_STARTED")
 
 

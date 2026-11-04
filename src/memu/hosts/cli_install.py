@@ -16,6 +16,40 @@ from memu import trust
 from memu.hosts.install_language import text
 
 
+def configure_windows_path(executable: Path) -> None:
+    """Match the Codex installer: persist user PATH and update this process."""
+    if sys.platform != "win32":
+        return
+    directory = str(executable.parent)
+    shell = shutil.which("powershell.exe")
+    if shell is None:
+        raise FileNotFoundError("PowerShell is required to configure Windows user PATH")  # noqa: TRY003
+    script = r"""$ErrorActionPreference = 'Stop'
+$directory = $env:MEMU_CLI_BIN
+$userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+$entries = @($userPath -split ';' | ForEach-Object { $_.Trim().TrimEnd('\\') })
+if ($entries -notcontains $directory.TrimEnd('\\')) {
+    $updated = if ([string]::IsNullOrEmpty($userPath)) { $directory } else { "$directory;$userPath" }
+    [Environment]::SetEnvironmentVariable('Path', $updated, 'User')
+}
+"""
+    subprocess.run(  # noqa: S603
+        [shell, "-NoProfile", "-NonInteractive", "-Command", script],
+        env={**os.environ, "MEMU_CLI_BIN": directory},
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        timeout=20,
+        check=True,
+    )
+    current = os.environ.get("PATH", "")
+    if os.path.normcase(directory) not in {
+        os.path.normcase(os.path.expandvars(entry.strip().strip('"')).rstrip("\\/"))
+        for entry in current.split(os.pathsep)
+        if entry.strip()
+    }:
+        os.environ["PATH"] = directory + (os.pathsep + current if current else "")
+
+
 def install(host: str, url: str, *, unix_shell: str, env: dict[str, str] | None = None) -> None:
     windows = sys.platform == "win32"
     shell = shutil.which("powershell.exe" if windows else unix_shell)
