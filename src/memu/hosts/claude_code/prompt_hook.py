@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from memu.env import LONG_QUERY_CHARS
+from memu.hosts.claude_code.query_extraction import select_query
 from memu.hosts.claude_code.submit import is_automatic
 from memu.hosts.retrieval import CONTEXT_PREFIX as CONTEXT_PREFIX
 from memu.hosts.retrieval import render_context
@@ -55,7 +57,7 @@ def bounded_context(memories: dict[str, Any], trace: dict[str, Any]) -> str | No
     return context if any(selected.values()) or not any(memories.get(layer) for layer in LAYERS) else None
 
 
-def _retrieve(trace: dict[str, Any]) -> dict[str, Any] | None:
+def _retrieve(trace: dict[str, Any]) -> dict[str, Any] | None:  # noqa: C901
     event = json.load(sys.stdin)
     if not isinstance(event, dict) or event.get("hook_event_name") != "UserPromptSubmit":
         raise ValueError("expected a UserPromptSubmit object")  # noqa: TRY003
@@ -69,10 +71,23 @@ def _retrieve(trace: dict[str, Any]) -> dict[str, Any] | None:
     if os.environ.get("MEMU_CLAUDE_MEMORIZE") == "1":
         trace["status"] = "self_run_skipped"
         return None
-    query = prompt[:2000]
+    if not prompt.strip():
+        trace["status"] = "empty_query"
+        return None
+    started = time.monotonic()
+    query = select_query(prompt, trace)
+    query_kind = (
+        "extracted"
+        if trace["query_source"] == "extracted"
+        else "long"
+        if sum(not char.isspace() for char in prompt) >= LONG_QUERY_CHARS
+        else "short"
+    )
     trace.update(
+        query=query,
+        query_kind=query_kind,
         query_chars=len(query),
-        query_truncated=len(prompt) > 2000,
+        query_truncated=trace["query_source"] == "prefix",
         prompt_sha256=hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
     )
     if not query.strip():
@@ -82,10 +97,10 @@ def _retrieve(trace: dict[str, Any]) -> dict[str, Any] | None:
     if isinstance(event.get("session_id"), str):
         env["CLAUDE_CODE_SESSION_ID"] = event["session_id"]
     result = subprocess.run(  # noqa: S603
-        [sys.executable, "-m", "memu.hosts.claude_code.cli", "retrieve", "--query-stdin"],
+        [sys.executable, "-m", "memu.hosts.claude_code.cli", "retrieve", "--query-stdin", "--query-kind", query_kind],
         input=query.encode("utf-8"),
         capture_output=True,
-        timeout=40,
+        timeout=max(1, 40 - (time.monotonic() - started)),
         env=env,
         check=False,
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
