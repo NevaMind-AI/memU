@@ -25,7 +25,7 @@ SPECS = (CLAUDE, CURSOR, HERMES, CODEX, OPENCLAW, WORKBUDDY, COLA, GENERIC)
 @pytest.mark.parametrize("filename", DOCS.values())
 def test_embedded_docs_render_names_only_from_host_spec(spec: HostSpec, filename: str) -> None:
     source = (files(spec.package) / filename).read_text(encoding="utf-8")
-    if spec.host == "codex" and filename == "BRIDGING_TASK.md":
+    if spec.host in {"codex", "claude-code"} and filename == "BRIDGING_TASK.md":
         assert source == ""
         return
 
@@ -126,9 +126,10 @@ def test_codex_task_guide_stays_empty_without_remote_or_cache(
     assert cache.read_text(encoding="utf-8") == old
 
 
-def test_record_guide_version_guard_is_codex_only() -> None:
+def test_hook_installation_guides_reject_obsolete_procedures() -> None:
     old = "Current {{task_name}}; former {{former_task_names}}; all {{all_task_names}}."
-    assert templates._valid_host_doc("claude-code", "INSTALL.md", old)
+    assert not templates._valid_host_doc("claude-code", "INSTALL.md", old)
+    assert templates._valid_host_doc("claude-code", "INSTALL.md", "<!-- memu-claude-install: cli-v1 -->\n" + old)
     assert not templates._valid_host_doc("codex", "INSTALL.md", old)
 
 

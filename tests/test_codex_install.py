@@ -253,7 +253,7 @@ def test_noninteractive_unconfigured_backend_does_not_prompt(machine, monkeypatc
 
 
 def test_active_worker_does_not_block_configuration_only_installation(machine):
-    with install.workspace_lock(machine[1]) as acquired:
+    with install.installation.workspace_lock(machine[1]) as acquired:
         assert acquired
         assert invoke(machine) == 0
     assert machine[2].count(("register",)) == 1
@@ -262,7 +262,7 @@ def test_active_worker_does_not_block_configuration_only_installation(machine):
 def test_concurrent_installer_blocks_without_retrying(machine, capsys):
     lock_dir = machine[1] / ".install"
     lock_dir.mkdir()
-    with install.workspace_lock(lock_dir) as acquired:
+    with install.installation.workspace_lock(lock_dir) as acquired:
         assert acquired
         assert invoke(machine) == 2
     assert machine[2] == []
@@ -358,7 +358,7 @@ def test_interactive_install_configures_a_backend_when_only_client_metadata_exis
     config_file.config_path().write_text("MEMU_CLIENT_ID=existing-client\n")
     inputs = iter(["local", str(tmp_path / "memory.sqlite3"), "openai", "fixture-model", "http://localhost:11434/v1"])
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
-    monkeypatch.setattr(install.getpass, "getpass", lambda _: "fixture-secret")
+    monkeypatch.setattr(install.installation.getpass, "getpass", lambda _: "fixture-secret")
     observed = []
 
     async def doctor(spec, args):

@@ -5,9 +5,35 @@
 
 from contextvars import ContextVar
 
-LANGUAGE: ContextVar[str] = ContextVar("codex_install_language", default="en")
+LANGUAGE: ContextVar[str] = ContextVar("host_install_language", default="en")
 
 _EN = {
+    "   请在 cc-switch 等工具中完成配置，按回车重新检查：": "   Configure in cc-switch or another tool, then press Enter to recheck: ",
+    "   ← {reply} · {seconds} 秒": "   ← {reply} · {seconds}s",
+    "Claude 请求失败（退出码 {code}，{seconds} 秒）。": "Claude request failed (exit {code}, {seconds}s).",
+    "   PATH：已配置，新终端生效。": "   PATH: configured; available in new terminals.",
+    "   → Reply OK. · 等待回复（最多 60 秒）": "   → Reply OK. · Waiting for response (up to 60s)",
+    "Claude 未返回有效 JSON 回复。": "Claude did not return valid JSON.",
+    "没有收到有效回复。": "No valid response was received.",
+    "   Claude CLI：{path}": "   Claude CLI: {path}",
+    "Claude 请求等待超过 60 秒；请检查服务连接后重试。": "Claude request timed out after 60 seconds; check provider connectivity and retry.",
+    "   验证调用？少量费用 · 不保存本地会话 [Y/n] ": "   Test request? Small charge · no local session history [Y/n] ",
+    "请选择 y 或 n。": "Choose y or n.",
+    "调用验证失败。": "Request verification failed.",
+    "   调用：已跳过，服务可用性未验证。": "   Request: skipped; provider access unverified.",
+    "   认证：已配置，待请求验证。": "   Authentication: configured; request unverified.",
+    "\n   🔐  配置认证\n   1. Claude 账号登录\n   2. 输入 API key / token\n   3. cc-switch 等外部工具\n   4. 稍后配置": "\n   🔐  Configure authentication\n   1. Claude account login\n   2. Enter API key / token\n   3. cc-switch or other external tools\n   4. Configure later",
+    "   请选择 [1/2/3/4]：": "   Choose [1/2/3/4]: ",
+    "   API 地址：": "   API endpoint: ",
+    "   凭据类型 [api-key/token]（默认 api-key）：": "   Credential type [api-key/token] (api-key): ",
+    "   凭据（明文保存到 ~/.claude/settings.json）：": "   Credential (saved in plaintext in ~/.claude/settings.json): ",
+    "认证已暂缓；后台记忆尚不可用。稍后运行 `memu-claude-code auth`，再重新安装。": "Authentication deferred; background memory is not ready. Run `memu-claude-code auth` later, then rerun install.",
+    "Claude 登录未完成；请重新运行 `memu-claude-code auth`。": "Claude login did not complete; rerun `memu-claude-code auth`.",
+    "请选择 login、provider、external 或 later。": "Choose login, provider, external or later.",
+    "准备 Claude CLI": "Preparing Claude CLI",
+    "\n👋  欢迎安装 memU · Claude Code": "\n👋  Welcome to memU · Claude Code",
+    "重新打开 Claude 会话使 hook 配置生效。如曾配置 memU 定时任务，请自行暂停或移除。": "Open a new Claude session to load hooks. Pause or remove any previously configured memU schedules yourself.",
+    "📥  正在下载官方 {host} 安装器：{url}": "📥  Downloading the official {host} installer: {url}",
     "安装已取消": "Installation cancelled",
     "输入已结束，安装已停止。请在交互终端重新运行，或使用 --non-interactive 并提供所需参数。": "Input ended; installation stopped. Run in an interactive terminal, or use --non-interactive with the required options.",
     "   独立 Codex CLI：{path}": "   Standalone Codex CLI: {path}",
@@ -17,7 +43,6 @@ _EN = {
     "安装未完成": "Installation failed",
     "\n🎉 memU 安装完成！自动检索和后台记忆已就绪。": "\n🎉 memU is ready! Automatic retrieval and background memory are configured.",
     "   {mode} 后端连接正常": "   {mode} backend connection verified",
-    "📥 正在下载官方 Codex 安装器：{url}": "📥 Downloading the official Codex installer: {url}",
     "📦 正在运行官方安装器，下载和安装可能需要几分钟……": "📦 Running the official installer; download and setup may take a few minutes…",
     "官方安装器下载失败：HTTP {code}。服务器拒绝了下载请求。": "Official installer download failed: HTTP {code}. The server refused the download request.",
     "无法连接官方安装器下载服务，请检查网络和代理设置。": "Cannot connect to the official installer download service. Check your network and proxy settings.",
@@ -56,7 +81,6 @@ _EN = {
     "旧检索 managed block 含未知编辑，请由 Agent 检查后定向清理。": "The legacy retrieval managed block has unknown edits; ask an Agent to inspect it before selective cleanup.",
     "如果你使用 Codex Desktop，且以前自行安装过 memU 定时任务，现在可以自行暂停或移除它们，避免重复处理记忆。": "If you use Codex Desktop and previously set up memU scheduled tasks yourself, you can now pause or remove them to avoid processing memory twice.",
     "是否使用官方安装器补装 Codex？[y/N] ": "Install missing Codex using the official installer? [y/N] ",
-    "Codex CLI 准备失败。": "Codex CLI preparation failed.",
     "另一个安装进程正在运行，请稍后重新发起安装。": "Another installer is running; start installation again later.",
     "请检查本地诊断并重新运行安装。": "Check the local diagnostics and run the installer again.",
 }

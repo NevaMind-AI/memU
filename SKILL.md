@@ -77,7 +77,7 @@ It probes this machine and reports, per agent, whether **memorization** works
 instruction file exists to patch) — and it will redirect you to a dedicated
 binary if your host turns out to have one.
 
-For Codex, continue directly to Step 3: its installer handles backend configuration
+For Codex and Claude Code, continue directly to Step 3: their installers handle backend configuration
 and verification in one invocation. Pass any user-supplied backend inputs to that
 installer when the guide requests them.
 
