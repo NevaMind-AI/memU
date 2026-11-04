@@ -44,11 +44,22 @@ async def retrieve(
     min_score = retrieval_min_score(kind)
     backend = build_agentic_memory_backend_from_env()
     result: dict[str, Any] = await backend.progressive_retrieve(query, where=where)
+    segment_count = len(result.get("segments", []))
     if min_score is not None:
         result["segments"] = [s for s in result.get("segments", []) if s["score"] >= min_score]
         file_ids = {s["recall_file_id"] for s in result["segments"]}
         result["files"] = [f for f in result.get("files", []) if f["id"] in file_ids]
-    return _shape_for_agent(result)
+    shaped = _shape_for_agent(result)
+    shaped["retrieval_status"] = {
+        "status": "succeeded",
+        "query_kind": kind,
+        "min_score": min_score,
+        "candidate_segments": segment_count,
+        "filtered_segments": segment_count - len(result.get("segments", [])),
+        "retained_segments": len(result.get("segments", [])),
+        "returned_hits": len(shaped["hits"]),
+    }
+    return shaped
 
 
 def _shape_for_agent(result: dict[str, Any]) -> dict[str, Any]:
