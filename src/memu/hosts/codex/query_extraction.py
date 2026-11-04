@@ -12,15 +12,15 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from memu.hosts import query_extraction as shared
+from memu.hosts import query_extraction
 from memu.hosts.codex import cli_prepare
 
-EXTRACT_THRESHOLD = shared.EXTRACT_THRESHOLD
-EXTRACT_TIMEOUT = shared.EXTRACT_TIMEOUT
+EXTRACT_THRESHOLD = query_extraction.EXTRACT_THRESHOLD
+EXTRACT_TIMEOUT = query_extraction.EXTRACT_TIMEOUT
 
 
 def select_query(prompt: str, trace: dict[str, Any]) -> str:
-    return shared.select_query(prompt, trace, _extract)
+    return query_extraction.select_query(prompt, trace, _extract)
 
 
 def _https_options() -> list[str]:
@@ -55,7 +55,7 @@ def _extract(prompt: str) -> str:
             }),
             encoding="utf-8",
         )
-        instruction = shared.extraction_instruction(prompt)
+        instruction = query_extraction.extraction_instruction(prompt)
         flags = 0
         if sys.platform == "win32":
             flags = subprocess.CREATE_NO_WINDOW
@@ -86,11 +86,11 @@ def _extract(prompt: str) -> str:
             flags,
         )
         value = json.loads(output.read_text(encoding="utf-8"))
-        return shared.validate_query(value)
+        return query_extraction.validate_query(value)
 
 
 def _run(argv: list[str], source: bytes, cwd: Path, flags: int) -> None:
-    shared.run_extraction(
+    query_extraction.run_extraction(
         argv,
         source,
         cwd,

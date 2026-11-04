@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from memu.hosts import query_extraction as shared
+from memu.hosts import query_extraction
 from memu.hosts.claude_code import prompt_hook
 from memu.hosts.claude_code import query_extraction as claude
 from memu.hosts.codex import query_extraction as codex
@@ -58,12 +58,12 @@ def test_claude_request_and_validation(value, monkeypatch):
         assert json.loads(argv[argv.index("--settings") + 1]) == {"disableAllHooks": True}
         assert json.loads(argv[argv.index("--mcp-config") + 1]) == {"mcpServers": {}}
         assert "--strict-mcp-config" in argv and "--no-session-persistence" in argv
-        assert source.decode() == shared.extraction_instruction("x" * 600)
+        assert source.decode() == query_extraction.extraction_instruction("x" * 600)
         assert cwd.is_dir()
         assert kwargs["env"] == {"USER_PROVIDER": "preserved", "MEMU_BRIDGING_RUN": "1", "MEMU_CLAUDE_MEMORIZE": "1"}
         return json.dumps(value).encode()
 
-    monkeypatch.setattr(shared, "run_extraction", run)
+    monkeypatch.setattr(query_extraction, "run_extraction", run)
     trace: dict[str, Any] = {}
     assert claude.select_query("x" * 600, trace) == ("topic" if value == {"result": '{"query":"topic"}'} else "x" * 600)
 
