@@ -13,6 +13,7 @@ from memu.database.models import (
     RecallFile,
     RecallFileSegment,
     Resource,
+    build_scoped_models,
 )
 from memu.database.repositories import (
     RecallFileRepo,
@@ -84,10 +85,15 @@ class SQLiteStore(Database):
         recall_file_model = recall_file_model or self._sqla_models.RecallFile
         recall_file_segment_model = recall_file_segment_model or self._sqla_models.RecallFileSegment
 
+        # Hydrate scoped domain records, not unscoped base records: SQLModel
+        # classes above describe storage, while these preserve API scope fields.
+        resource_record, file_record, segment_record = build_scoped_models(self._scope_model)
+
         # Initialize repositories
         self.resource_repo = SQLiteResourceRepo(
             state=self._state,
             resource_model=resource_model,
+            record_model=resource_record,
             sqla_models=self._sqla_models,
             sessions=self._sessions,
             scope_fields=self._scope_fields,
@@ -95,6 +101,7 @@ class SQLiteStore(Database):
         self.recall_file_repo = SQLiteRecallFileRepo(
             state=self._state,
             recall_file_model=recall_file_model,
+            record_model=file_record,
             sqla_models=self._sqla_models,
             sessions=self._sessions,
             scope_fields=self._scope_fields,
@@ -102,6 +109,7 @@ class SQLiteStore(Database):
         self.recall_file_segment_repo = SQLiteRecallFileSegmentRepo(
             state=self._state,
             recall_file_segment_model=recall_file_segment_model,
+            record_model=segment_record,
             sqla_models=self._sqla_models,
             sessions=self._sessions,
             scope_fields=self._scope_fields,

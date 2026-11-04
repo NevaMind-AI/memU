@@ -30,6 +30,7 @@ class SQLiteResourceRepo(SQLiteRepoBase, ResourceRepo):
         sqla_models: SQLiteSQLAModels,
         sessions: SQLiteSessionManager,
         scope_fields: list[str],
+        record_model: type[Resource] = Resource,
     ) -> None:
         """Initialize resource repository.
 
@@ -47,6 +48,7 @@ class SQLiteResourceRepo(SQLiteRepoBase, ResourceRepo):
             scope_fields=scope_fields,
         )
         self._resource_model = resource_model
+        self._record_model = record_model
         self.resources = self._state.resources
 
     def list_resources(self, where: Mapping[str, Any] | None = None) -> dict[str, Resource]:
@@ -67,7 +69,7 @@ class SQLiteResourceRepo(SQLiteRepoBase, ResourceRepo):
 
         result: dict[str, Resource] = {}
         for row in rows:
-            res = Resource(
+            res = self._record_model(
                 id=row.id,
                 url=row.url,
                 local_path=row.local_path,
@@ -102,7 +104,7 @@ class SQLiteResourceRepo(SQLiteRepoBase, ResourceRepo):
 
             deleted: dict[str, Resource] = {}
             for row in rows:
-                res = Resource(
+                res = self._record_model(
                     id=row.id,
                     url=row.url,
                     local_path=row.local_path,
@@ -177,7 +179,7 @@ class SQLiteResourceRepo(SQLiteRepoBase, ResourceRepo):
             session.commit()
             session.refresh(row)
 
-        res = Resource(
+        res = self._record_model(
             id=row.id,
             url=row.url,
             local_path=row.local_path,
@@ -233,7 +235,7 @@ class SQLiteResourceRepo(SQLiteRepoBase, ResourceRepo):
             session.commit()
             session.refresh(row)
 
-        res = Resource(
+        res = self._record_model(
             id=row.id,
             url=row.url,
             local_path=row.local_path,

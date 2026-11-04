@@ -116,6 +116,8 @@ shutil.copy("memu.db", "memu_backup.db")
 
 To migrate data from SQLite to PostgreSQL:
 
+SQLite reads and cached records retain the configured user scope fields, including after reopening the database. Export those fields along with the record so its ownership is preserved.
+
 ```python
 import json
 from memu.database.sqlite import build_sqlite_database
