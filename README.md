@@ -140,37 +140,6 @@ Installation is the one-message setup in [Quick start](#quick-start) or [Self-ho
 Afterwards `<binary> doctor` proves the whole loop resolves: config, selected
 mode, and a live retrieval.
 
-For Claude Code background memory, `memu-claude-code auth` reuses existing CLI
-credentials or offers account login, manual API key / token entry, external
-configuration (such as cc-switch) followed by a recheck, and configuring later.
-Standalone CLI subprocesses use `~/.claude` and clear Desktop host authentication
-and session metadata. When invoked from Desktop, they also discard its inherited
-gateway URL and model routing so the standalone CLI loads its own user settings.
-User credentials and proxy settings are retained; provider environment overrides
-are retained when invoked outside Desktop.
-Use `--method login|provider|external|later` to select
-an option directly. API keys and tokens are entered without echo and saved in
-plaintext in `~/.claude/settings.json`. `--non-interactive` never opens login or
-prompts for credentials; missing authentication returns exit code 2. After
-configuring authentication, rerun installation to finish enabling the hooks.
-
-For Agent-driven Claude installation, the packaged guide defaults to English;
-Chinese is selected only on an explicit user request. Its completion report
-preserves the emoji labels and states whether the real CLI request was tested.
-
-Interactive Claude installation also offers a minimal model request to verify
-actual CLI access. It may incur a small provider charge; `--skip-cli-test` skips
-it. Non-interactive installs send it only with `--test-cli`. The check disables
-tools, MCP and hooks, uses a temporary working directory, and passes
-`--no-session-persistence` to avoid saving local session history. Provider-side
-request retention follows your provider's policy. A failed check stops installation;
-a skipped check leaves actual CLI access unverified. The installer displays the
-selected executable, request progress, elapsed time, and a credential-redacted
-response or failure diagnostic. On Windows it adds the Claude directory to user
-PATH while preserving existing entries, and updates the installer process PATH.
-Existing parent terminals retain their environment; use the displayed absolute
-path there or open a new terminal.
-
 Adding another host means implementing one `TranscriptSource` (where its session logs live, how its records are shaped) plus a `HostSpec`-sized CLI — the pipeline, verbs, and instruction text are shared.
 
 ## Developer integration
