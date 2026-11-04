@@ -154,6 +154,10 @@ plaintext in `~/.claude/settings.json`. `--non-interactive` never opens login or
 prompts for credentials; missing authentication returns exit code 2. After
 configuring authentication, rerun installation to finish enabling the hooks.
 
+For Agent-driven Claude installation, the packaged guide defaults to English;
+Chinese is selected only on an explicit user request. Its completion report
+preserves the emoji labels and states whether the real CLI request was tested.
+
 Interactive Claude installation also offers a minimal model request to verify
 actual CLI access. It may incur a small provider charge; `--skip-cli-test` skips
 it. Non-interactive installs send it only with `--test-cli`. The check disables
