@@ -101,8 +101,7 @@ def _safe_response(message: str) -> str:
 def verify_request(executable: Path) -> None:
     """Check a real headless request without tools, hooks or local session history."""
     started = time.monotonic()
-    print(text("   → 请求：Reply OK.（禁用工具，不保存本地会话）"), flush=True)
-    print(text("   … 等待 Claude 回复（最多 60 秒）"), flush=True)
+    print(text("   → Reply OK. · 等待回复（最多 60 秒）"), flush=True)
     env = {**os.environ, "CLAUDE_CONFIG_DIR": str(Path.home() / ".claude"), "MEMU_CLAUDE_MEMORIZE": "1"}
     env.pop("CLAUDECODE", None)
     env.pop("CLAUDE_CODE_SESSION_ID", None)
@@ -135,14 +134,7 @@ def verify_request(executable: Path) -> None:
             timeout=60,
             check=False,
         )
-    print(
-        text(
-            "   ← Claude 进程已返回，退出码 {code}，耗时 {seconds} 秒",
-            code=str(result.returncode),
-            seconds=f"{time.monotonic() - started:.1f}",
-        ),
-        flush=True,
-    )
+    seconds = f"{time.monotonic() - started:.1f}"
     try:
         value = json.loads(result.stdout)
     except ValueError:
@@ -159,8 +151,11 @@ def verify_request(executable: Path) -> None:
         diagnostic = _safe_response(
             response if isinstance(response, str) and response.strip() else result.stderr.strip()
         )
-        raise ValueError(text("Claude 请求失败。") + ("\n" + diagnostic if diagnostic else text("没有收到有效回复。")))
-    print(text("   ← 回复：{reply}", reply=_safe_response(response.strip())), flush=True)
+        raise ValueError(
+            text("Claude 请求失败（退出码 {code}，{seconds} 秒）。", code=str(result.returncode), seconds=seconds)
+            + ("\n" + diagnostic if diagnostic else text("没有收到有效回复。"))
+        )
+    print(text("   ← {reply} · {seconds} 秒", reply=_safe_response(response.strip()), seconds=seconds), flush=True)
 
 
 def auth_status(executable: Path) -> bool:

@@ -61,7 +61,7 @@ def _provider() -> None:
 
 def configure(executable: Path, *, method: str | None, non_interactive: bool) -> None:
     if cli_prepare.auth_status(executable):
-        print(text("Claude 认证已配置（尚未验证服务可访问）。"))
+        print(text("   认证：已配置，待请求验证。"))
         return
     if non_interactive:
         raise installation.Blocked(
@@ -91,7 +91,7 @@ def configure(executable: Path, *, method: str | None, non_interactive: bool) ->
         raise installation.Blocked(
             "Claude still reports no authentication. Run `memu-claude-code auth` to retry; background memory is not ready."
         )
-    print(text("Claude 认证已配置（尚未验证服务可访问）。"))
+    print(text("   认证：已配置，待请求验证。"))
 
 
 async def run(args: argparse.Namespace) -> int:

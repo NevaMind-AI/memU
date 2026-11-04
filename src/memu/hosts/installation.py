@@ -116,7 +116,8 @@ def _render_progress(result: dict[str, Any], output: TextIO, *, json_output: boo
             "blocked": (text("安装暂时无法继续"), "⚠️"),
             "cancelled": (text("安装已取消"), "👋"),
         }.get(status, (text("安装未完成"), "❌"))
-        print(f"\n{symbol}  {label}\n   {result.get('detail', '')}", file=output, flush=True)
+        detail = "\n".join("   " + line for line in result.get("detail", "").splitlines())
+        print(f"\n{symbol}  {label}\n{detail}", file=output, flush=True)
     if result.get("complete"):
         print(text("\n🎉 memU 安装完成！自动检索和后台记忆已就绪。"), file=output, flush=True)
     if result.get("notice"):

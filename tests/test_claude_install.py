@@ -91,7 +91,7 @@ def test_missing_path_reports_selected_executable_before_request(machine, monkey
     output = capsys.readouterr()
     assert "Claude CLI:" in output.err
     if sys.platform == "win32":
-        assert "PATH is configured for future terminals" in output.err
+        assert "PATH: configured; available in new terminals." in output.err
     assert output.err.index("Claude CLI:") < output.err.index("REQUEST_STARTED")
 
 

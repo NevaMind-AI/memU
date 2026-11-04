@@ -54,15 +54,11 @@ def _prepare_host(args: argparse.Namespace) -> None:
     missing_on_path = shutil.which("claude") is None
     cli_install.configure_windows_path(executable)
     if missing_on_path and sys.platform == "win32":
-        print(text("   PATH 已为后续终端配置；当前终端可使用上面的绝对路径，或重新打开终端运行 claude。"), flush=True)
+        print(text("   PATH：已配置，新终端生效。"), flush=True)
     auth.configure(executable, method=args.auth, non_interactive=args.non_interactive)
     verify = args.test_cli
     if verify is None and not args.non_interactive:
-        answer = (
-            input(text("发送一次最小 Claude 请求验证后台调用？可能产生少量费用，不保存本地会话记录。[Y/n] "))
-            .strip()
-            .lower()
-        )
+        answer = input(text("   验证调用？少量费用 · 不保存本地会话 [Y/n] ")).strip().lower()
         if answer not in {"", "y", "yes", "n", "no"}:
             raise lifecycle.Blocked(text("请选择 y 或 n。"))
         verify = answer in {"", "y", "yes"}
@@ -73,13 +69,10 @@ def _prepare_host(args: argparse.Namespace) -> None:
             raise lifecycle.Failed(text("Claude 请求等待超过 60 秒；请检查服务连接后重试。")) from None
         except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
             detail = cli_prepare._safe_response(str(exc)) if isinstance(exc, ValueError) else type(exc).__name__
-            raise lifecycle.Failed(
-                text("Claude 实际调用验证失败；请检查认证、服务连接和模型配置，然后重试。") + "\n" + detail
-            ) from None
+            raise lifecycle.Failed(text("调用验证失败。") + "\n" + detail) from None
         args.install_result["cli_request_verified"] = True
-        print(text("Claude 实际调用验证通过。"))
     else:
-        skipped = text("已跳过实际调用验证；认证已配置，服务可用性未验证。")
+        skipped = text("   调用：已跳过，服务可用性未验证。")
         print(skipped)
         args.install_result["notice"] = text(args.install_result["notice"]) + "\n" + skipped
 

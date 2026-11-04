@@ -30,9 +30,9 @@ def test_visible_response_and_provider_error_are_redacted(tmp_path, monkeypatch,
     assert "private.example" not in str(exc.value)
     assert "unknown-secret" not in str(exc.value)
     output = capsys.readouterr().out
-    assert "Request: Reply OK." in output
-    assert "Waiting for Claude" in output
-    assert "exit 1" in output
+    assert "Reply OK." in output
+    assert "Waiting for response" in output
+    assert "exit 1" in str(exc.value)
     monkeypatch.setattr(
         cli_prepare.subprocess,
         "run",
@@ -40,7 +40,7 @@ def test_visible_response_and_provider_error_are_redacted(tmp_path, monkeypatch,
     )
     cli_prepare.verify_request(tmp_path / "claude.exe")
     output = capsys.readouterr().out
-    assert "Response: OK [redacted]" in output
+    assert "← OK [redacted]" in output
 
 
 @pytest.mark.parametrize("response", ["success", "error", "empty", "invalid", "exit", "timeout"])
