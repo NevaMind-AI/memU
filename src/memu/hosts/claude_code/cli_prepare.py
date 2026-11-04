@@ -1,5 +1,7 @@
 """Standalone Claude Code discovery, official installation and authentication status."""
 
+# ruff: noqa: RUF001
+
 from __future__ import annotations
 
 import json
@@ -9,10 +11,12 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
 from memu.hosts import cli_install
+from memu.hosts.install_language import text
 
 
 def _desktop_binary(path: Path) -> bool:
@@ -72,8 +76,33 @@ def prepare(selected: str | None = None, *, install_missing: bool = False) -> Pa
     return executable
 
 
+def _safe_response(message: str) -> str:
+    """Remove configured credentials and endpoint URLs from child diagnostics."""
+    values = dict(os.environ)
+    try:
+        settings = json.loads((Path.home() / ".claude/settings.json").read_text(encoding="utf-8-sig"))
+        if isinstance(settings, dict) and isinstance(settings.get("env"), dict):
+            values.update(settings["env"])
+    except (OSError, ValueError):
+        pass
+    for name, value in values.items():
+        if (
+            isinstance(value, str)
+            and value
+            and any(key in name.upper() for key in ("KEY", "TOKEN", "SECRET", "PASSWORD", "URL"))
+        ):
+            message = message.replace(value, "[redacted]")
+    message = re.sub(r"https?://[^\s<>\"]+", "[endpoint]", message)
+    message = re.sub(r"(?i)bearer\s+\S+", "Bearer [redacted]", message)
+    message = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", message)
+    return message[:2000]
+
+
 def verify_request(executable: Path) -> None:
     """Check a real headless request without tools, hooks or local session history."""
+    started = time.monotonic()
+    print(text("   → 请求：Reply OK.（禁用工具，不保存本地会话）"), flush=True)
+    print(text("   … 等待 Claude 回复（最多 60 秒）"), flush=True)
     env = {**os.environ, "CLAUDE_CONFIG_DIR": str(Path.home() / ".claude"), "MEMU_CLAUDE_MEMORIZE": "1"}
     env.pop("CLAUDECODE", None)
     env.pop("CLAUDE_CODE_SESSION_ID", None)
@@ -106,15 +135,32 @@ def verify_request(executable: Path) -> None:
             timeout=60,
             check=False,
         )
-    value = json.loads(result.stdout)
+    print(
+        text(
+            "   ← Claude 进程已返回，退出码 {code}，耗时 {seconds} 秒",
+            code=str(result.returncode),
+            seconds=f"{time.monotonic() - started:.1f}",
+        ),
+        flush=True,
+    )
+    try:
+        value = json.loads(result.stdout)
+    except ValueError:
+        diagnostic = _safe_response(result.stderr.strip() or result.stdout.strip())
+        raise ValueError(text("Claude 未返回有效 JSON 回复。") + ("\n" + diagnostic if diagnostic else "")) from None
+    response = value.get("result", "") if isinstance(value, dict) else ""
     if (
         result.returncode
         or not isinstance(value, dict)
         or value.get("is_error")
-        or not isinstance(value.get("result"), str)
-        or not value["result"].strip()
+        or not isinstance(response, str)
+        or not response.strip()
     ):
-        raise ValueError("Claude request did not produce a successful response")  # noqa: TRY003
+        diagnostic = _safe_response(
+            response if isinstance(response, str) and response.strip() else result.stderr.strip()
+        )
+        raise ValueError(text("Claude 请求失败。") + ("\n" + diagnostic if diagnostic else text("没有收到有效回复。")))
+    print(text("   ← 回复：{reply}", reply=_safe_response(response.strip())), flush=True)
 
 
 def auth_status(executable: Path) -> bool:

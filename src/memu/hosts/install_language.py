@@ -8,6 +8,17 @@ from contextvars import ContextVar
 LANGUAGE: ContextVar[str] = ContextVar("host_install_language", default="en")
 
 _EN = {
+    "   → 请求：Reply OK.（禁用工具，不保存本地会话）": "   → Request: Reply OK. (tools disabled; no local session history)",
+    "   … 等待 Claude 回复（最多 60 秒）": "   … Waiting for Claude (up to 60 seconds)",
+    "   ← Claude 进程已返回，退出码 {code}，耗时 {seconds} 秒": "   ← Claude process returned: exit {code}, {seconds}s",
+    "Claude 未返回有效 JSON 回复。": "Claude did not return valid JSON.",
+    "Claude 请求失败。": "Claude request failed.",
+    "没有收到有效回复。": "No valid response was received.",
+    "   ← 回复：{reply}": "   ← Response: {reply}",
+    "   Claude CLI：{path}": "   Claude CLI: {path}",
+    "   提示：当前终端 PATH 中没有 claude；memU 将使用上面的绝对路径。": "   Note: claude is not on this terminal's PATH; memU uses the absolute path above.",
+    "   如需直接运行 claude，请将此目录加入 PATH 并重新打开终端：{path}": "   To run claude directly, add this directory to PATH and reopen your terminal: {path}",
+    "Claude 请求等待超过 60 秒；请检查服务连接后重试。": "Claude request timed out after 60 seconds; check provider connectivity and retry.",
     "发送一次最小 Claude 请求验证后台调用？可能产生少量费用，不保存本地会话记录。[Y/n] ": "Send a minimal Claude request to verify background access? May incur a small charge; no local session history. [Y/n] ",
     "请选择 y 或 n。": "Choose y or n.",
     "Claude 实际调用验证失败；请检查认证、服务连接和模型配置，然后重试。": "Claude request verification failed; check authentication, provider access and model configuration, then retry.",

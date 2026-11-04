@@ -83,6 +83,16 @@ def test_install_authentication_choices(machine, monkeypatch, capsys, choice):
         assert not (machine[0] / "settings.json").exists()
 
 
+def test_missing_path_reports_selected_executable_before_request(machine, monkeypatch, capsys):
+    monkeypatch.setattr(install.shutil, "which", lambda _: None)
+    monkeypatch.setattr(cli_prepare, "verify_request", lambda executable: print("REQUEST_STARTED"))
+    assert invoke(machine, "--test-cli") == 0
+    output = capsys.readouterr()
+    assert "Claude CLI:" in output.err
+    assert "not on this terminal's PATH" in output.err
+    assert output.err.index("Claude CLI:") < output.err.index("REQUEST_STARTED")
+
+
 @pytest.mark.parametrize("choice", ["skip", "success", "failure"])
 def test_real_request_is_opt_in_for_noninteractive_install(machine, monkeypatch, capsys, choice):
     calls = []
@@ -92,6 +102,7 @@ def test_real_request_is_opt_in_for_noninteractive_install(machine, monkeypatch,
         if choice == "failure":
             raise ValueError("private-provider-secret")
 
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "private-provider-secret")
     monkeypatch.setattr(cli_prepare, "verify_request", verify)
     code = invoke(machine, *([] if choice == "skip" else ["--test-cli"]))
     assert code == (1 if choice == "failure" else 0)

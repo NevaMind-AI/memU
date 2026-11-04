@@ -9,6 +9,40 @@ import pytest
 from memu.hosts.claude_code import cli_prepare
 
 
+def test_visible_response_and_provider_error_are_redacted(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    directory = tmp_path / ".claude"
+    directory.mkdir()
+    (directory / "settings.json").write_text(json.dumps({"env": {"ANTHROPIC_AUTH_TOKEN": "saved-secret"}}))
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "environment-secret")
+    message = (
+        "Model demo[1m] unavailable; saved-secret environment-secret https://private.example/path Bearer unknown-secret"
+    )
+    monkeypatch.setattr(
+        cli_prepare.subprocess,
+        "run",
+        lambda *a, **k: subprocess.CompletedProcess(a[0], 1, json.dumps({"is_error": True, "result": message}), ""),
+    )
+    with pytest.raises(ValueError, match="Model demo") as exc:
+        cli_prepare.verify_request(tmp_path / "claude.exe")
+    assert "saved-secret" not in str(exc.value)
+    assert "environment-secret" not in str(exc.value)
+    assert "private.example" not in str(exc.value)
+    assert "unknown-secret" not in str(exc.value)
+    output = capsys.readouterr().out
+    assert "Request: Reply OK." in output
+    assert "Waiting for Claude" in output
+    assert "exit 1" in output
+    monkeypatch.setattr(
+        cli_prepare.subprocess,
+        "run",
+        lambda *a, **k: subprocess.CompletedProcess(a[0], 0, json.dumps({"result": "OK saved-secret"}), ""),
+    )
+    cli_prepare.verify_request(tmp_path / "claude.exe")
+    output = capsys.readouterr().out
+    assert "Response: OK [redacted]" in output
+
+
 @pytest.mark.parametrize("response", ["success", "error", "empty", "invalid", "exit", "timeout"])
 def test_minimal_request_is_isolated_and_validates_response(tmp_path, monkeypatch, response):
     monkeypatch.setattr(Path, "home", lambda: tmp_path)

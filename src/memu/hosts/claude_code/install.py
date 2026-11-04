@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import argparse
+import shutil
 import subprocess
 from typing import Any
 
@@ -47,6 +48,13 @@ def _prepare_host(args: argparse.Namespace) -> None:
         ):
             raise lifecycle.Blocked("Standalone Claude CLI required; rerun with --install-missing") from None
         executable = cli_prepare.prepare(install_missing=True)
+    print(text("   Claude CLI：{path}", path=str(executable)), flush=True)
+    if shutil.which("claude") is None:
+        print(text("   提示：当前终端 PATH 中没有 claude；memU 将使用上面的绝对路径。"), flush=True)
+        print(
+            text("   如需直接运行 claude，请将此目录加入 PATH 并重新打开终端：{path}", path=str(executable.parent)),
+            flush=True,
+        )
     auth.configure(executable, method=args.auth, non_interactive=args.non_interactive)
     verify = args.test_cli
     if verify is None and not args.non_interactive:
@@ -61,9 +69,12 @@ def _prepare_host(args: argparse.Namespace) -> None:
     if verify:
         try:
             cli_prepare.verify_request(executable)
+        except subprocess.TimeoutExpired:
+            raise lifecycle.Failed(text("Claude 请求等待超过 60 秒；请检查服务连接后重试。")) from None
         except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
+            detail = cli_prepare._safe_response(str(exc)) if isinstance(exc, ValueError) else type(exc).__name__
             raise lifecycle.Failed(
-                text("Claude 实际调用验证失败；请检查认证、服务连接和模型配置，然后重试。") + f" ({type(exc).__name__})"
+                text("Claude 实际调用验证失败；请检查认证、服务连接和模型配置，然后重试。") + "\n" + detail
             ) from None
         args.install_result["cli_request_verified"] = True
         print(text("Claude 实际调用验证通过。"))
@@ -71,7 +82,6 @@ def _prepare_host(args: argparse.Namespace) -> None:
         skipped = text("已跳过实际调用验证；认证已配置，服务可用性未验证。")
         print(skipped)
         args.install_result["notice"] = text(args.install_result["notice"]) + "\n" + skipped
-    print(f"   Claude CLI: {executable}", flush=True)
 
 
 async def _stage(stage: int, args: argparse.Namespace) -> None:
