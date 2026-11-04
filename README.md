@@ -141,8 +141,9 @@ Afterwards `<binary> doctor` proves the whole loop resolves: config, selected
 mode, and a live retrieval.
 
 For Claude Code background memory, `memu-claude-code auth` checks existing CLI
-credentials or offers account login, API key / third-party configuration (including
-cc-switch), and configuring later. Use `--method login|provider|later` to select
+credentials or offers account login, manual API key / token entry, external
+configuration (such as cc-switch) followed by a recheck, and configuring later.
+Use `--method login|provider|external|later` to select
 an option directly. API keys and tokens are entered without echo and saved in
 plaintext in `~/.claude/settings.json`. `--non-interactive` never opens login or
 prompts for credentials; missing authentication returns exit code 2. After

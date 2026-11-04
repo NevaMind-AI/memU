@@ -32,7 +32,7 @@ def test_existing_auth_skips_selection(machine, monkeypatch):
     assert main(["auth"]) == 0
 
 
-@pytest.mark.parametrize("selection", ["3", "invalid"])
+@pytest.mark.parametrize("selection", ["4", "invalid"])
 def test_later_or_invalid_does_not_change_settings(machine, monkeypatch, selection):
     monkeypatch.setattr("builtins.input", lambda _: selection)
     assert main(["auth"]) == 2
@@ -94,7 +94,7 @@ def test_input_end_returns_blocked_without_changes(machine, monkeypatch, capsys)
 
 
 def test_chinese_menu_is_scoped_to_invocation(machine, monkeypatch, capsys):
-    monkeypatch.setattr("builtins.input", lambda _: "3")
+    monkeypatch.setattr("builtins.input", lambda _: "4")
     assert main(["auth", "--language", "zh"]) == 2
     assert "使用 Claude 账号登录" in capsys.readouterr().out
     assert main(["auth"]) == 2
@@ -120,16 +120,22 @@ def test_provider_preserves_settings_and_hides_secret(machine, monkeypatch, caps
     assert settings["env"]["ANTHROPIC_API_KEY" if kind == "api-key" else "ANTHROPIC_AUTH_TOKEN"] == "fixture-secret"
 
 
-def test_provider_can_recheck_external_configuration(machine, monkeypatch):
-    states = iter([False, True])
+@pytest.mark.parametrize("configured", [False, True])
+def test_external_configuration_is_rechecked_without_writing(machine, monkeypatch, configured):
+    states = iter([False, configured])
     monkeypatch.setattr(cli_prepare, "auth_status", lambda _: next(states))
-    monkeypatch.setattr("builtins.input", lambda _: "")
-    assert main(["auth", "--method", "provider"]) == 0
+    answers = iter(["3", ""])
+    monkeypatch.setattr("builtins.input", lambda _: next(answers))
+    monkeypatch.setattr(auth.getpass, "getpass", lambda _: pytest.fail("external setup must not request credentials"))
+    monkeypatch.setattr(
+        auth.subprocess, "run", lambda *a, **k: pytest.fail("external setup must not launch login or tools")
+    )
+    assert main(["auth"]) == (0 if configured else 2)
     assert not machine.exists()
 
 
 @pytest.mark.parametrize(
-    "endpoint", ["not-a-url", "https://user:secret@provider.example", "https://provider.example/?token=secret"]
+    "endpoint", ["", "not-a-url", "https://user:secret@provider.example", "https://provider.example/?token=secret"]
 )
 def test_bad_endpoint_never_writes_credentials(machine, monkeypatch, endpoint):
     monkeypatch.setattr("builtins.input", lambda _: endpoint)

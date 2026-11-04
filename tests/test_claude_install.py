@@ -55,7 +55,7 @@ def invoke(machine, *options):
     return main(["install", "--non-interactive", "--json", "--base-dir", str(machine[1]), *options])
 
 
-@pytest.mark.parametrize("choice", ["login", "provider", "later"])
+@pytest.mark.parametrize("choice", ["login", "provider", "external", "later"])
 def test_install_authentication_choices(machine, monkeypatch, capsys, choice):
     calls = []
 

@@ -128,7 +128,7 @@ def register(sub: Any) -> None:
     lifecycle.add_arguments(parser, "claude-code")
     parser.add_argument("--claude", default=None)
     parser.add_argument(
-        "--auth", choices=("login", "provider", "later"), help="Authentication choice when not configured"
+        "--auth", choices=("login", "provider", "external", "later"), help="Authentication choice when not configured"
     )
     verification = parser.add_mutually_exclusive_group()
     verification.add_argument(

@@ -8,6 +8,7 @@ from contextvars import ContextVar
 LANGUAGE: ContextVar[str] = ContextVar("host_install_language", default="en")
 
 _EN = {
+    "请自行使用 cc-switch 等工具完成配置，然后按回车重新检查：": "Configure Claude using cc-switch or another external tool, then press Enter to recheck: ",
     "   ← {reply} · {seconds} 秒": "   ← {reply} · {seconds}s",
     "Claude 请求失败（退出码 {code}，{seconds} 秒）。": "Claude request failed (exit {code}, {seconds}s).",
     "   PATH：已配置，新终端生效。": "   PATH: configured; available in new terminals.",
@@ -28,15 +29,14 @@ _EN = {
     "Claude 实际调用验证通过。": "Claude request verified.",
     "   调用：已跳过，服务可用性未验证。": "   Request: skipped; provider access unverified.",
     "   认证：已配置，待请求验证。": "   Authentication: configured; request unverified.",
-    "后台记忆需要 Claude CLI 认证。\n1. 使用 Claude 账号登录\n2. API key / 第三方服务（包括 cc-switch）\n3. 稍后配置": "Background memory needs Claude CLI authentication.\n1. Claude account login\n2. API key / third-party service (including cc-switch)\n3. Configure later",
-    "认证方式 [1/2/3]：": "Authentication [1/2/3]: ",
-    "可复用 cc-switch、Bedrock、Vertex 或 Foundry 的已有配置。\n完成外部配置后按回车重新检查，或输入 API 地址并将凭据保存到 ~/.claude/settings.json。": "Existing cc-switch, Bedrock, Vertex or Foundry configuration can be reused.\nPress Enter after configuring it, or enter an API endpoint to save a key in ~/.claude/settings.json.",
-    "API 地址（留空重新检查已有配置）：": "API endpoint (blank: recheck existing configuration): ",
+    "后台记忆需要 Claude CLI 认证。\n1. 使用 Claude 账号登录\n2. 输入 API key / token 和服务地址\n3. 使用 cc-switch 等外部工具配置，完成后重新检查\n4. 稍后配置": "Background memory needs Claude CLI authentication.\n1. Claude account login\n2. Enter API key / token and endpoint\n3. Configure with external tools such as cc-switch, then recheck\n4. Configure later",
+    "认证方式 [1/2/3/4]：": "Authentication [1/2/3/4]: ",
+    "API 地址：": "API endpoint: ",
     "凭据类型 [api-key/token]（默认 api-key）：": "Credential type [api-key/token] (api-key): ",
     "API key / token（明文保存到 ~/.claude/settings.json）：": "API key / token (saved in plaintext in ~/.claude/settings.json): ",
     "认证已暂缓；后台记忆尚不可用。稍后运行 `memu-claude-code auth`，再重新安装。": "Authentication deferred; background memory is not ready. Run `memu-claude-code auth` later, then rerun install.",
     "Claude 登录未完成；请重新运行 `memu-claude-code auth`。": "Claude login did not complete; rerun `memu-claude-code auth`.",
-    "请选择 login、provider 或 later。": "Choose login, provider or later.",
+    "请选择 login、provider、external 或 later。": "Choose login, provider, external or later.",
     "准备 Claude CLI": "Preparing Claude CLI",
     "\n👋  欢迎安装 memU · Claude Code": "\n👋  Welcome to memU · Claude Code",
     "重新打开 Claude 会话使 hook 配置生效。如曾配置 memU 定时任务，请自行暂停或移除。": "Open a new Claude session to load hooks. Pause or remove any previously configured memU schedules yourself.",

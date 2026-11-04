@@ -18,45 +18,39 @@ from memu.hosts.install_language import LANGUAGE, text
 
 
 def _provider() -> None:
-    print(
-        text(
-            "可复用 cc-switch、Bedrock、Vertex 或 Foundry 的已有配置。\n完成外部配置后按回车重新检查，或输入 API 地址并将凭据保存到 ~/.claude/settings.json。"
-        )
-    )
-    endpoint = input(text("API 地址（留空重新检查已有配置）：")).strip()
-    if endpoint:
-        url = urlsplit(endpoint)
-        if (
-            url.scheme not in {"http", "https"}
-            or not url.hostname
-            or url.username
-            or url.password
-            or url.query
-            or url.fragment
-        ):
-            raise installation.Blocked("Enter an HTTP(S) endpoint without credentials, query or fragment.")
-        kind = input(text("凭据类型 [api-key/token]（默认 api-key）：")).strip() or "api-key"
-        if kind not in {"api-key", "token"}:
-            raise installation.Blocked("Choose api-key or token.")
-        secret = getpass.getpass(text("API key / token（明文保存到 ~/.claude/settings.json）：")).strip()
-        if not secret:
-            raise installation.Blocked("No credential supplied; configuration was not changed.")
-        lock = hook_install.home() / ".memu-hooks-lock"
-        lock.mkdir(parents=True, exist_ok=True)
-        with workspace_lock(lock) as acquired:
-            if not acquired:
-                raise installation.Blocked("Another Claude settings update is running.")
-            path, original, data = hook_install.read()
-            configured = data.setdefault("env", {})
-            if not isinstance(configured, dict):
-                raise installation.Blocked("Claude settings env must be an object.")
-            if configured.get("ANTHROPIC_API_KEY") or configured.get("ANTHROPIC_AUTH_TOKEN"):
-                raise installation.Blocked(
-                    "Existing credentials were preserved; inspect your provider configuration before replacing them."
-                )
-            configured["ANTHROPIC_BASE_URL"] = endpoint
-            configured["ANTHROPIC_API_KEY" if kind == "api-key" else "ANTHROPIC_AUTH_TOKEN"] = secret
-            hook_install._write(path, original, data)
+    endpoint = input(text("API 地址：")).strip()
+    url = urlsplit(endpoint)
+    if (
+        url.scheme not in {"http", "https"}
+        or not url.hostname
+        or url.username
+        or url.password
+        or url.query
+        or url.fragment
+    ):
+        raise installation.Blocked("Enter an HTTP(S) endpoint without credentials, query or fragment.")
+    kind = input(text("凭据类型 [api-key/token]（默认 api-key）：")).strip() or "api-key"
+    if kind not in {"api-key", "token"}:
+        raise installation.Blocked("Choose api-key or token.")
+    secret = getpass.getpass(text("API key / token（明文保存到 ~/.claude/settings.json）：")).strip()
+    if not secret:
+        raise installation.Blocked("No credential supplied; configuration was not changed.")
+    lock = hook_install.home() / ".memu-hooks-lock"
+    lock.mkdir(parents=True, exist_ok=True)
+    with workspace_lock(lock) as acquired:
+        if not acquired:
+            raise installation.Blocked("Another Claude settings update is running.")
+        path, original, data = hook_install.read()
+        configured = data.setdefault("env", {})
+        if not isinstance(configured, dict):
+            raise installation.Blocked("Claude settings env must be an object.")
+        if configured.get("ANTHROPIC_API_KEY") or configured.get("ANTHROPIC_AUTH_TOKEN"):
+            raise installation.Blocked(
+                "Existing credentials were preserved; inspect your provider configuration before replacing them."
+            )
+        configured["ANTHROPIC_BASE_URL"] = endpoint
+        configured["ANTHROPIC_API_KEY" if kind == "api-key" else "ANTHROPIC_AUTH_TOKEN"] = secret
+        hook_install._write(path, original, data)
 
 
 def configure(executable: Path, *, method: str | None, non_interactive: bool) -> None:
@@ -66,15 +60,17 @@ def configure(executable: Path, *, method: str | None, non_interactive: bool) ->
     if non_interactive:
         raise installation.Blocked(
             "Claude authentication is missing. Run `memu-claude-code auth` to choose account login, "
-            "API key / third-party service (including cc-switch), or configure later."
+            "manual API key / token entry, external configuration (including cc-switch), or configure later."
         )
     if method is None:
         print(
             text(
-                "后台记忆需要 Claude CLI 认证。\n1. 使用 Claude 账号登录\n2. API key / 第三方服务（包括 cc-switch）\n3. 稍后配置"
+                "后台记忆需要 Claude CLI 认证。\n1. 使用 Claude 账号登录\n2. 输入 API key / token 和服务地址\n3. 使用 cc-switch 等外部工具配置，完成后重新检查\n4. 稍后配置"
             )
         )
-        method = {"1": "login", "2": "provider", "3": "later"}.get(input(text("认证方式 [1/2/3]：")).strip())
+        method = {"1": "login", "2": "provider", "3": "external", "4": "later"}.get(
+            input(text("认证方式 [1/2/3/4]：")).strip()
+        )
     if method == "later":
         raise installation.Blocked("认证已暂缓；后台记忆尚不可用。稍后运行 `memu-claude-code auth`，再重新安装。")
     if method == "login":
@@ -85,8 +81,10 @@ def configure(executable: Path, *, method: str | None, non_interactive: bool) ->
             raise installation.Blocked("Claude 登录未完成；请重新运行 `memu-claude-code auth`。")
     elif method == "provider":
         _provider()
+    elif method == "external":
+        input(text("请自行使用 cc-switch 等工具完成配置，然后按回车重新检查："))
     else:
-        raise installation.Blocked("请选择 login、provider 或 later。")
+        raise installation.Blocked("请选择 login、provider、external 或 later。")
     if not cli_prepare.auth_status(executable):
         raise installation.Blocked(
             "Claude still reports no authentication. Run `memu-claude-code auth` to retry; background memory is not ready."
@@ -114,7 +112,7 @@ async def run(args: argparse.Namespace) -> int:
 def register(sub: Any) -> None:
     parser = sub.add_parser("auth", help="Configure Claude CLI account login or provider authentication")
     parser.add_argument("--language", choices=("en", "zh"))
-    parser.add_argument("--method", choices=("login", "provider", "later"))
+    parser.add_argument("--method", choices=("login", "provider", "external", "later"))
     parser.add_argument("--claude", default=None)
     parser.add_argument("--non-interactive", action="store_true")
     parser.set_defaults(handler=run)
