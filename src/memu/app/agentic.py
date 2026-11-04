@@ -387,8 +387,9 @@ class AgenticMixin:
         # Provider calls run outside the transaction. Re-plan under the backend
         # lock so no other writer can invalidate the snapshot before writes.
         batch = _EmbeddingBatch()
-        self._plan_resources(resource or [], store=store, user_scope=user_scope, batch=batch)
-        self._plan_recall_files(recall_files or [], store=store, user_data=user_data, batch=batch)
+        with store.snapshot():
+            self._plan_resources(resource or [], store=store, user_scope=user_scope, batch=batch)
+            self._plan_recall_files(recall_files or [], store=store, user_data=user_data, batch=batch)
         while True:
             await batch.resolve(embed_client)
             with store.atomic():
@@ -400,11 +401,11 @@ class AgenticMixin:
                     resource_plans, store=store, user_data=user_data, batch=batch
                 )
                 committed_files = self._write_recall_files(file_plans, store=store, user_data=user_data, batch=batch)
-            break
-        return {
-            "resources": [self._model_dump_without_embeddings(r) for r in committed_resources],
-            "recall_files": [self._model_dump_without_embeddings(f) for f in committed_files],
-        }
+                result = {
+                    "resources": [self._model_dump_without_embeddings(r) for r in committed_resources],
+                    "recall_files": [self._model_dump_without_embeddings(f) for f in committed_files],
+                }
+            return result
 
     def _plan_resources(
         self,
