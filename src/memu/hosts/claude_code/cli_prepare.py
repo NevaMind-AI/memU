@@ -59,6 +59,9 @@ def _desktop_binary(path: Path) -> bool:
         or "/anthropicclaude_" in value
         or "/appdata/local/anthropicclaude/" in value
         or "/appdata/local/claude/" in value
+        # Desktop data roots are stable across package versions and MSIX redirection.
+        or re.search(r"/(?:claude|claude-3p)/claude-code(?:-vm)?/", value) is not None
+        or "/.claude/remote/ccd-cli/" in value
     )
 
 

@@ -299,9 +299,22 @@ def test_official_installer_uses_platform_shell(monkeypatch, platform):
     assert seen[0][0] == ("powershell.exe" if platform == "win32" else "bash")
 
 
-def test_desktop_path_is_skipped_and_explicit_desktop_rejected(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    "relative",
+    [
+        "Applications/Claude.app/Contents/Resources/claude",
+        "AppData/Local/Claude-3p/claude-code/2.1.234/claude.exe",
+        "AppData/Roaming/Claude/claude-code/2.1.308/claude.exe",
+        "AppData/Local/Packages/Claude_example/LocalCache/Local/Claude-3p/claude-code/2.1.308/abc123/claude.exe",
+        "Library/Application Support/Claude/claude-code/2.1.246/claude.app/Contents/MacOS/claude",
+        ".config/Claude/claude-code/2.1.308/abc123/claude",
+        "custom-xdg/Claude-3p/claude-code/2.1.308/claude",
+        ".claude/remote/ccd-cli/2.1.308",
+    ],
+)
+def test_desktop_path_is_skipped_and_explicit_desktop_rejected(tmp_path, monkeypatch, relative):
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    desktop = tmp_path / "Applications/Claude.app/Contents/Resources/claude"
+    desktop = tmp_path / relative
     standalone = tmp_path / "tools/claude"
     desktop.parent.mkdir(parents=True)
     standalone.parent.mkdir()
@@ -314,6 +327,19 @@ def test_desktop_path_is_skipped_and_explicit_desktop_rejected(tmp_path, monkeyp
     assert cli_prepare.find_executable() == standalone.resolve()
     with pytest.raises(FileNotFoundError, match="standalone"):
         cli_prepare.find_executable(str(desktop))
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/home/user/.local/share/claude/versions/2.1.317",
+        "/opt/homebrew/Caskroom/claude-code/2.1.317/claude",
+        "/usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js",
+        "C:/Users/user/AppData/Local/Microsoft/WinGet/Packages/Anthropic.ClaudeCode_example/claude.exe",
+    ],
+)
+def test_standalone_package_paths_are_not_excluded(path):
+    assert not cli_prepare._desktop_binary(Path(path))
 
 
 @pytest.mark.asyncio
