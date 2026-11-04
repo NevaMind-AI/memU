@@ -148,6 +148,14 @@ plaintext in `~/.claude/settings.json`. `--non-interactive` never opens login or
 prompts for credentials; missing authentication returns exit code 2. After
 configuring authentication, rerun installation to finish enabling the hooks.
 
+Interactive Claude installation also offers a minimal model request to verify
+actual CLI access. It may incur a small provider charge; `--skip-cli-test` skips
+it. Non-interactive installs send it only with `--test-cli`. The check disables
+tools, MCP and hooks, uses a temporary working directory, and passes
+`--no-session-persistence` to avoid saving local session history. Provider-side
+request retention follows your provider's policy. A failed check stops installation;
+a skipped check leaves actual CLI access unverified.
+
 Adding another host means implementing one `TranscriptSource` (where its session logs live, how its records are shaped) plus a `HostSpec`-sized CLI — the pipeline, verbs, and instruction text are shared.
 
 ## Developer integration

@@ -8,6 +8,11 @@ from contextvars import ContextVar
 LANGUAGE: ContextVar[str] = ContextVar("host_install_language", default="en")
 
 _EN = {
+    "发送一次最小 Claude 请求验证后台调用？可能产生少量费用，不保存本地会话记录。[Y/n] ": "Send a minimal Claude request to verify background access? May incur a small charge; no local session history. [Y/n] ",
+    "请选择 y 或 n。": "Choose y or n.",
+    "Claude 实际调用验证失败；请检查认证、服务连接和模型配置，然后重试。": "Claude request verification failed; check authentication, provider access and model configuration, then retry.",
+    "Claude 实际调用验证通过。": "Claude request verified.",
+    "已跳过实际调用验证；认证已配置，服务可用性未验证。": "Request verification skipped; authentication is configured, provider access is unverified.",
     "Claude 认证已配置（尚未验证服务可访问）。": "Claude authentication is configured (provider access unverified).",
     "后台记忆需要 Claude CLI 认证。\n1. 使用 Claude 账号登录\n2. API key / 第三方服务（包括 cc-switch）\n3. 稍后配置": "Background memory needs Claude CLI authentication.\n1. Claude account login\n2. API key / third-party service (including cc-switch)\n3. Configure later",
     "认证方式 [1/2/3]：": "Authentication [1/2/3]: ",

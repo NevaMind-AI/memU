@@ -8,6 +8,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -69,6 +70,51 @@ def prepare(selected: str | None = None, *, install_missing: bool = False) -> Pa
     if not re.fullmatch(r"\d+\.\d+\.\d+[^\r\n]* \(Claude Code\)", result.stdout.strip()):
         raise ValueError("Claude --version did not report a Claude Code version")  # noqa: TRY003
     return executable
+
+
+def verify_request(executable: Path) -> None:
+    """Check a real headless request without tools, hooks or local session history."""
+    env = {**os.environ, "CLAUDE_CONFIG_DIR": str(Path.home() / ".claude"), "MEMU_CLAUDE_MEMORIZE": "1"}
+    env.pop("CLAUDECODE", None)
+    env.pop("CLAUDE_CODE_SESSION_ID", None)
+    with tempfile.TemporaryDirectory(prefix="memu-claude-check-") as directory:
+        result = subprocess.run(  # noqa: S603
+            [
+                str(executable),
+                "-p",
+                "Reply OK.",
+                "--output-format",
+                "json",
+                "--no-session-persistence",
+                "--tools",
+                "",
+                "--strict-mcp-config",
+                "--mcp-config",
+                '{"mcpServers":{}}',
+                "--settings",
+                '{"disableAllHooks":true}',
+                "--system-prompt",
+                "Reply briefly. Do not use tools.",
+            ],
+            cwd=directory,
+            env=env,
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+            check=False,
+        )
+    value = json.loads(result.stdout)
+    if (
+        result.returncode
+        or not isinstance(value, dict)
+        or value.get("is_error")
+        or not isinstance(value.get("result"), str)
+        or not value["result"].strip()
+    ):
+        raise ValueError("Claude request did not produce a successful response")  # noqa: TRY003
 
 
 def auth_status(executable: Path) -> bool:

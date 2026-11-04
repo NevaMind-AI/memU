@@ -6,11 +6,13 @@
 from __future__ import annotations
 
 import argparse
+import subprocess
 from typing import Any
 
 from memu.hosts import installation as lifecycle
 from memu.hosts.claude_code import auth, cli_prepare, hook_install
 from memu.hosts.hooks.admission import workspace_lock
+from memu.hosts.install_language import text
 
 STAGES = (
     "检查安装条件",
@@ -46,6 +48,29 @@ def _prepare_host(args: argparse.Namespace) -> None:
             raise lifecycle.Blocked("Standalone Claude CLI required; rerun with --install-missing") from None
         executable = cli_prepare.prepare(install_missing=True)
     auth.configure(executable, method=args.auth, non_interactive=args.non_interactive)
+    verify = args.test_cli
+    if verify is None and not args.non_interactive:
+        answer = (
+            input(text("发送一次最小 Claude 请求验证后台调用？可能产生少量费用，不保存本地会话记录。[Y/n] "))
+            .strip()
+            .lower()
+        )
+        if answer not in {"", "y", "yes", "n", "no"}:
+            raise lifecycle.Blocked(text("请选择 y 或 n。"))
+        verify = answer in {"", "y", "yes"}
+    if verify:
+        try:
+            cli_prepare.verify_request(executable)
+        except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
+            raise lifecycle.Failed(
+                text("Claude 实际调用验证失败；请检查认证、服务连接和模型配置，然后重试。") + f" ({type(exc).__name__})"
+            ) from None
+        args.install_result["cli_request_verified"] = True
+        print(text("Claude 实际调用验证通过。"))
+    else:
+        skipped = text("已跳过实际调用验证；认证已配置，服务可用性未验证。")
+        print(skipped)
+        args.install_result["notice"] = text(args.install_result["notice"]) + "\n" + skipped
     print(f"   Claude CLI: {executable}", flush=True)
 
 
@@ -80,16 +105,18 @@ async def _stage(stage: int, args: argparse.Namespace) -> None:
 
 
 async def run(args: argparse.Namespace) -> int:
+    args.install_result = {
+        "notice": "重新打开 Claude 会话使 hook 配置生效。如曾配置 memU 定时任务，请自行暂停或移除。",
+        "hook_verification": "local_settings_readback",
+        "cli_request_verified": False,
+    }
     return await lifecycle.run(
         args,
         host="claude-code",
         stages=STAGES,
         execute=_stage,
         welcome="\n👋  欢迎安装 memU · Claude Code",
-        completion={
-            "notice": "重新打开 Claude 会话使 hook 配置生效。如曾配置 memU 定时任务，请自行暂停或移除。",
-            "hook_verification": "local_settings_readback",
-        },
+        completion=args.install_result,
     )
 
 
@@ -99,5 +126,16 @@ def register(sub: Any) -> None:
     parser.add_argument("--claude", default=None)
     parser.add_argument(
         "--auth", choices=("login", "provider", "later"), help="Authentication choice when not configured"
+    )
+    verification = parser.add_mutually_exclusive_group()
+    verification.add_argument(
+        "--test-cli",
+        dest="test_cli",
+        action="store_true",
+        default=None,
+        help="Send a minimal paid Claude request without local session persistence",
+    )
+    verification.add_argument(
+        "--skip-cli-test", dest="test_cli", action="store_false", help="Skip the real Claude request"
     )
     parser.set_defaults(handler=run)

@@ -64,13 +64,56 @@ def test_install_authentication_choices(machine, monkeypatch, capsys, choice):
             raise lifecycle.Blocked("Authentication deferred")  # noqa: TRY003
 
     monkeypatch.setattr(auth, "configure", configure)
-    code = main(["install", "--json", "--language", "en", "--base-dir", str(machine[1]), "--auth", choice])
+    code = main([
+        "install",
+        "--skip-cli-test",
+        "--json",
+        "--language",
+        "en",
+        "--base-dir",
+        str(machine[1]),
+        "--auth",
+        choice,
+    ])
     assert code == (2 if choice == "later" else 0)
     assert calls == [(choice, False)]
     progress = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
     assert progress[-1]["complete"] is (choice != "later")
     if choice == "later":
         assert not (machine[0] / "settings.json").exists()
+
+
+@pytest.mark.parametrize("choice", ["skip", "success", "failure"])
+def test_real_request_is_opt_in_for_noninteractive_install(machine, monkeypatch, capsys, choice):
+    calls = []
+
+    def verify(executable):
+        calls.append(executable)
+        if choice == "failure":
+            raise ValueError("private-provider-secret")
+
+    monkeypatch.setattr(cli_prepare, "verify_request", verify)
+    code = invoke(machine, *([] if choice == "skip" else ["--test-cli"]))
+    assert code == (1 if choice == "failure" else 0)
+    output = capsys.readouterr()
+    assert "private-provider-secret" not in output.out + output.err
+    progress = [json.loads(line) for line in output.out.splitlines()]
+    if choice != "failure":
+        assert progress[-1]["cli_request_verified"] is (choice == "success")
+    else:
+        assert not (machine[0] / "settings.json").exists()
+    assert len(calls) == (0 if choice == "skip" else 1)
+
+
+@pytest.mark.parametrize("answer", ["", "n"])
+def test_interactive_request_choice(machine, monkeypatch, capsys, answer):
+    calls = []
+    monkeypatch.setattr("builtins.input", lambda _: answer)
+    monkeypatch.setattr(cli_prepare, "verify_request", lambda executable: calls.append(executable))
+    assert main(["install", "--json", "--language", "en", "--base-dir", str(machine[1])]) == 0
+    progress = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert progress[-1]["cli_request_verified"] is (answer == "")
+    assert bool(calls) is (answer == "")
 
 
 def test_install_uninstall_preserves_third_party_settings_and_processing(machine, capsys):
