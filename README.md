@@ -145,7 +145,6 @@ Adding another host means implementing one `TranscriptSource` (where its session
 ## Developer integration
 
 Use `memu memorize` to turn application-owned conversations into memory and skills.
-See the [developer guide](docs/developer.md) for the input format and integration workflow.
 
 ## CLI
 
