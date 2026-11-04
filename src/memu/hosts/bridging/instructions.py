@@ -57,6 +57,13 @@ You may combine (b) and (c) if the session warrants it.
 
 ## Step 3 — write the memory files
 
+Use prose or bullet points, not Markdown tables. Write each fact on one physical
+line as a complete statement with its subject, meaning, and necessary scope or
+conditions. Include dates only to establish validity or scope, or when the user
+needs historical recall. Avoid bare values and references such as "same as above".
+When patching existing tables, express changed facts in this form and preserve
+unrelated content.
+
 Write each memory file you create or patch to a path under `{track_dir}` with a
 meaningful kebab-case name (last write wins when patching). Every file you write
 must start with this front-matter head, followed by the memory body:
@@ -113,6 +120,11 @@ For the session as a whole, pick ONE of:
 You may combine (b) and (c) if the session warrants it.
 
 ## Step 3 — write the skills
+
+Use prose, bullet points, or numbered steps, not Markdown tables. Make each
+condition, action, and outcome independently understandable. When patching
+existing tables, express changed instructions in this form and preserve unrelated
+content.
 
 Write each skill file you create or patch to a path under `{track_dir}` with a
 meaningful kebab-case name that describes the task family — not a placeholder
