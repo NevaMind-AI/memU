@@ -1,5 +1,33 @@
 # Host retrieval configuration
 
+## Retrieval entry points
+
+The current installation flows use the following retrieval entry points. Hook
+migration is implemented for Codex and Claude Code; the other adapters continue
+to ask the agent to invoke `<binary> retrieve`.
+
+| Hosts | Retrieval entry point | Query preparation |
+|---|---|---|
+| Codex | `UserPromptSubmit` hook | Query extraction for eligible prompts; original/prefix fallback on failure or input limits |
+| Claude Code | `UserPromptSubmit` hook | Original prompt, limited to its first 2,000 characters; no query extraction |
+| Cola, OpenClaw, pi | Agent invokes `retrieve` through the `memu-retrieve` skill | Agent chooses the query using the skill's instructions |
+| Cursor, Hermes, WorkBuddy, generic | Agent invokes `retrieve` through a managed inline instruction | Agent chooses the query using the inline instructions |
+
+All of these host CLI retrieval paths return `retrieval_status` and use the
+backend-specific score cutoffs below. Codex and Claude Code additionally wrap
+results with shared agent-facing guidance and `context_counts`: `returned` and
+`omitted` counts for hits/resources after applying any hook context budget.
+Skill and inline-instruction paths expose the retrieval command's JSON directly;
+they do not use that hook wrapper.
+
+Re-running the Codex or Claude Code installer registers hooks and removes the
+managed legacy retrieval instruction/skill. A package upgrade alone does not
+migrate an existing installation. This table describes implementation and
+installation behavior, not confirmation that hooks are enabled or delivered in
+a particular running session.
+
+## Score configuration
+
 Host segment score cutoffs are selected by `MEMU_MEMORY_MODE`. Configure overrides
 in `~/.memu/config.env`; process environment variables take precedence.
 
