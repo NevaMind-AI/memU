@@ -26,6 +26,26 @@ def test_exact_boundary_keeps_complete_entry() -> None:
     assert trace["omitted_counts"] == {"hits": 1, "resources": 0}
 
 
+def test_status_is_preserved_within_the_whole_context_budget() -> None:
+    from memu.hosts.retrieval import render_context
+
+    status = {
+        "status": "succeeded",
+        "query_kind": "short",
+        "min_score": 0.55,
+        "candidate_segments": 5,
+        "filtered_segments": 4,
+        "retained_segments": 1,
+        "returned_hits": 1,
+    }
+    payload = {"hits": [{"text": "😀" * 6000}], "resources": [], "retrieval_status": status}
+    trace: dict = {}
+    context = hook.bounded_context(payload, trace)
+    assert context == render_context({"hits": [], "resources": [], "retrieval_status": status})
+    assert trace["omitted_counts"] == {"hits": 1, "resources": 0}
+    assert trace["context_utf16_units"] <= hook.CONTEXT_BUDGET
+
+
 def test_oversized_entries_do_not_block_later_hits_or_resources() -> None:
     small = {"text": '中文😀"\\\n', "path": "memory/example.md"}
     resource = {"path": "notes.md", "caption": "complete resource"}
@@ -41,13 +61,15 @@ def test_oversized_entries_do_not_block_later_hits_or_resources() -> None:
     assert trace["omitted_counts"] == {"hits": 1, "resources": 1}
 
 
-@pytest.mark.parametrize("payload", [{"hits": []}, {"hits": [{"text": "x" * 10000}]}])
+@pytest.mark.parametrize("payload", [{"hits": [{"text": "x" * 10000}]}, {"retrieval_status": {"detail": "x" * 10000}}])
 def test_no_fitting_entries_return_no_context(payload: dict) -> None:
     assert hook.bounded_context(payload, {}) is None
 
 
 @pytest.mark.parametrize("rewake", [False, True])
-@pytest.mark.parametrize("outcome", ["success", "empty", "oversized", "failure", "timeout", "invalid", "bad_entry"])
+@pytest.mark.parametrize(
+    "outcome", ["success", "empty", "filtered", "oversized", "failure", "timeout", "invalid", "bad_entry"]
+)
 def test_cli_returns_context_or_fails_open(tmp_path, monkeypatch, capsys, outcome, rewake):
     prompt = '中文😀"\r\n' * 600
     event = {"hook_event_name": "UserPromptSubmit", "session_id": "synthetic-session", "prompt": prompt}
@@ -64,6 +86,19 @@ def test_cli_returns_context_or_fails_open(tmp_path, monkeypatch, capsys, outcom
         payload = {
             "success": {"hits": [{"text": "记忆😀"}], "resources": []},
             "empty": {"hits": [], "resources": []},
+            "filtered": {
+                "hits": [],
+                "resources": [],
+                "retrieval_status": {
+                    "status": "succeeded",
+                    "query_kind": "short",
+                    "min_score": 0.55,
+                    "candidate_segments": 5,
+                    "filtered_segments": 5,
+                    "retained_segments": 0,
+                    "returned_hits": 0,
+                },
+            },
             "oversized": {"hits": [{"text": "x" * 10000}], "resources": []},
             "invalid": [],
             "bad_entry": {"hits": ["not an object"]},
@@ -72,7 +107,8 @@ def test_cli_returns_context_or_fails_open(tmp_path, monkeypatch, capsys, outcom
 
     monkeypatch.setattr(hook.subprocess, "run", retrieve)
     options = ["--rewake"] if rewake else []
-    assert main(["prompt-hook", "--base-dir", str(tmp_path), *options]) == (2 if rewake and outcome == "success" else 0)
+    has_context = outcome in ("success", "empty", "filtered")
+    assert main(["prompt-hook", "--base-dir", str(tmp_path), *options]) == (2 if rewake and has_context else 0)
     output = capsys.readouterr()
     trace = json.loads(next((tmp_path / "log/hooks/retrieve").glob("*.json")).read_text(encoding="utf-8"))
     argv, kwargs = calls[0]
@@ -81,13 +117,20 @@ def test_cli_returns_context_or_fails_open(tmp_path, monkeypatch, capsys, outcom
     assert kwargs["env"]["CLAUDE_CODE_SESSION_ID"] == "synthetic-session"
     assert kwargs["timeout"] == 40
     assert trace["query_truncated"]
-    if outcome == "success":
+    if has_context:
         context = output.err.strip() if rewake else json.loads(output.out)["hookSpecificOutput"]["additionalContext"]
         if rewake:
             assert not output.out
-        assert "记忆😀" in context
+        assert context.startswith(hook.CONTEXT_PREFIX)
+        result = json.loads(context[len(hook.CONTEXT_PREFIX) :])
+        if outcome == "success":
+            assert "记忆😀" in context
+        else:
+            assert result["hits"] == result["resources"] == []
+        if outcome == "filtered":
+            assert result["retrieval_status"]["filtered_segments"] == 5
         assert len(context.encode("utf-16-le")) // 2 <= hook.CONTEXT_BUDGET
-        assert trace["status"] == "context_returned"
+        assert trace["status"] == ("context_returned" if outcome == "success" else "empty_result")
         assert trace["omitted_counts"] == {"hits": 0, "resources": 0}
     else:
         assert not output.out
