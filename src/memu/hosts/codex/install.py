@@ -37,10 +37,6 @@ async def _command(argv: list[str]) -> int:
     return int(await args.handler(args))
 
 
-async def _backend(args: argparse.Namespace) -> None:
-    await installation.backend(args, _command)
-
-
 def _inspect() -> None:
     hooks = _home() / "hooks.json"
     if hooks.is_symlink():
@@ -60,7 +56,7 @@ async def _stage(stage: int, args: argparse.Namespace) -> None:
     if stage == 1:
         _inspect()
     elif stage == 2:
-        await _backend(args)
+        await installation.backend(args, _command)
     elif stage == 3:
         _prepare_host(args)
     elif stage == 4:
