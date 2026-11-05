@@ -75,7 +75,31 @@ def test_remote_urls_are_not(url: str) -> None:
 def test_ambient_proxy_is_ignored_for_loopback(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HTTP_PROXY", PROXY)
     assert _load_proxy("http://localhost:11434/v1") is None
-    assert _load_proxy("https://api.openai.com/v1") == PROXY
+    assert _load_proxy("http://api.openai.com/v1") == PROXY
+    assert _load_proxy("https://api.openai.com/v1") is None
+
+
+def test_ambient_proxy_matches_target_scheme(monkeypatch: pytest.MonkeyPatch) -> None:
+    https_proxy = "http://secure-proxy.corp:8443"
+    monkeypatch.setenv("HTTP_PROXY", PROXY)
+    monkeypatch.setenv("HTTPS_PROXY", https_proxy)
+
+    assert _load_proxy("http://api.example.com/v1") == PROXY
+    assert _load_proxy("https://api.example.com/v1") == https_proxy
+
+    http_client = HTTPEmbeddingClient(base_url="http://api.example.com/v1", api_key="x", embed_model="m")
+    https_client = HTTPEmbeddingClient(base_url="https://api.example.com/v1", api_key="x", embed_model="m")
+    assert http_client.proxy == PROXY
+    assert https_client.proxy == https_proxy
+
+
+def test_explicit_memu_proxy_takes_precedence_over_both_schemes(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HTTP_PROXY", "http://http-proxy.corp:8080")
+    monkeypatch.setenv("HTTPS_PROXY", "http://https-proxy.corp:8443")
+    monkeypatch.setenv("MEMU_HTTP_PROXY", PROXY)
+
+    assert _load_proxy("http://api.example.com/v1") == PROXY
+    assert _load_proxy("https://api.example.com/v1") == PROXY
 
 
 def test_explicit_memu_proxy_wins_even_for_loopback(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -104,7 +128,7 @@ def test_http_client_bypasses_ambient_proxy_for_loopback(monkeypatch: pytest.Mon
     assert local.proxy is None
     assert local.mounts == {"all://localhost": None}
 
-    remote = HTTPEmbeddingClient(base_url="https://api.openai.com/v1", api_key="x", embed_model="m")
+    remote = HTTPEmbeddingClient(base_url="http://api.openai.com/v1", api_key="x", embed_model="m")
     assert remote.proxy == PROXY
     assert remote.mounts is None
 
