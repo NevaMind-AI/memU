@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import AbstractContextManager
 from typing import Protocol, runtime_checkable
 
 from memu.database.models import RecallFile as RecallFileRecord
@@ -23,6 +24,10 @@ class Database(Protocol):
     resources: dict[str, ResourceRecord]
     recall_files: dict[str, RecallFileRecord]
     segments: list[RecallFileSegmentRecord]
+
+    def atomic(self) -> AbstractContextManager[None]: ...
+
+    def snapshot(self) -> AbstractContextManager[None]: ...
 
     def close(self) -> None: ...
 
