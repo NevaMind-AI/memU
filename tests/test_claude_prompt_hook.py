@@ -145,6 +145,8 @@ def test_cli_returns_context_or_fails_open(tmp_path, monkeypatch, capsys, outcom
         if rewake:
             assert not output.out
         assert context.startswith(hook.CONTEXT_PREFIX)
+        assert trace["additional_context"] == context
+        assert trace["retrieve_result"]["hits"] == ([{"text": "记忆😀"}] if outcome == "success" else [])
         result = json.loads(context[len(hook.CONTEXT_PREFIX) :])
         if outcome == "success":
             assert "记忆😀" in context
@@ -159,6 +161,9 @@ def test_cli_returns_context_or_fails_open(tmp_path, monkeypatch, capsys, outcom
         assert not output.out
         expected = {"empty": "empty_result", "oversized": "budget_exhausted"}.get(outcome, "failed")
         assert trace["status"] == expected
+        if outcome == "oversized":
+            assert trace["retrieve_result"]["hits"] == [{"text": "x" * 10000}]
+            assert trace["additional_context"] is None
 
 
 @pytest.mark.parametrize(

@@ -112,8 +112,10 @@ def _retrieve(trace: dict[str, Any]) -> dict[str, Any] | None:  # noqa: C901
     memories = json.loads(result.stdout.decode("utf-8"))
     if not isinstance(memories, dict) or any(not isinstance(memories.get(k, []), list) for k in LAYERS):
         raise ValueError("retrieve must return an object containing result lists")  # noqa: TRY003
+    trace["retrieve_result"] = memories
     trace["counts"] = {k: len(memories.get(k, [])) for k in LAYERS}
     context = bounded_context(memories, trace)
+    trace["additional_context"] = context
     if context is None:
         trace["status"] = "budget_exhausted"
         return None
