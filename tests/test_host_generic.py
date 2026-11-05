@@ -6,6 +6,8 @@ from __future__ import annotations
 import json
 import pathlib
 
+import pytest
+
 from memu.hosts.base import RecordKind
 from memu.hosts.generic.detect import probe, render, scan_home
 from memu.hosts.generic.sessions import GenericTranscriptSource
@@ -114,6 +116,40 @@ def test_detect_flags_unrecognized_jsonl_and_sqlite(tmp_path: pathlib.Path) -> N
     assert not result.memorization and result.session_files
     text = render(result)
     assert "no record matched a known dialect" in text
+
+
+def test_detect_skips_broken_jsonl_symlinks_without_losing_valid_sessions(tmp_path: pathlib.Path) -> None:
+    root = _agent_dir(tmp_path, sessions=True, instructions=True)
+    broken = root / "sessions" / "missing.jsonl"
+    try:
+        broken.symlink_to("does-not-exist.jsonl")
+    except (OSError, NotImplementedError):
+        pytest.skip("file symlinks are unavailable in this environment")
+
+    result = probe(root)
+    assert result.session_files == [root / "sessions" / "abc.jsonl"]
+    assert result.memorization
+    assert result.retrieval
+    assert scan_home(tmp_path)[0].memorization
+
+
+def test_detect_skips_unstatable_jsonl_without_discarding_healthy_ones(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _agent_dir(tmp_path, sessions=True, instructions=False)
+    inaccessible = root / "sessions" / "inaccessible.jsonl"
+    inaccessible.write_text('{"role":"user","content":"other"}\n', encoding="utf-8")
+    original_stat = pathlib.Path.stat
+
+    def stat_with_denied_file(self: pathlib.Path, *args: object, **kwargs: object):
+        if self == inaccessible:
+            raise PermissionError
+        return original_stat(self)
+
+    monkeypatch.setattr(pathlib.Path, "stat", stat_with_denied_file)
+    result = probe(root)
+    assert result.session_files == [root / "sessions" / "abc.jsonl"]
+    assert result.memorization
 
 
 def test_detect_points_dedicated_hosts_at_their_binary(tmp_path: pathlib.Path) -> None:
