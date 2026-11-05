@@ -9,7 +9,7 @@ from typing import Any
 import pendulum
 from pydantic import BaseModel
 from sqlalchemy import JSON, MetaData, String, Text
-from sqlmodel import Column, DateTime, Field, Index, SQLModel, func
+from sqlmodel import DateTime, Field, Index, SQLModel, func
 
 from memu.database.models import (
     RecallFile,
@@ -48,36 +48,40 @@ class SQLiteBaseModelMixin(SQLModel):
 class SQLiteResourceModel(SQLiteBaseModelMixin, Resource):
     """SQLite resource model."""
 
-    url: str = Field(sa_column=Column(String, nullable=False))
-    local_path: str = Field(sa_column=Column(String, nullable=False))
-    caption: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    url: str = Field(sa_type=String, nullable=False)
+    local_path: str = Field(sa_type=String, nullable=False)
+    caption: str | None = Field(default=None, sa_type=Text, nullable=True)
     # Override inherited embedding field: SQLite has no native vector type, so store the
     # vector in a JSON column (a bare ``list`` annotation is not mappable by SQLModel).
-    embedding: list[float] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
-    track: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    embedding: list[float] | None = Field(default=None, sa_type=JSON, nullable=True)
+    track: str | None = Field(default=None, sa_type=String, nullable=True)
 
 
 class SQLiteRecallFileModel(SQLiteBaseModelMixin, RecallFile):
     """SQLite recall file model."""
 
-    name: str = Field(sa_column=Column(String, nullable=False, index=True))
-    description: str = Field(sa_column=Column(Text, nullable=False))
+    name: str = Field(sa_type=String, nullable=False, index=True)
+    description: str = Field(sa_type=Text, nullable=False)
     # Override inherited embedding field: SQLite has no native vector type, so store the
     # vector in a JSON column (a bare ``list`` annotation is not mappable by SQLModel).
-    embedding: list[float] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
-    content: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
-    track: str = Field(default="memory", sa_column=Column(String, nullable=False, server_default="memory"))
+    embedding: list[float] | None = Field(default=None, sa_type=JSON, nullable=True)
+    content: str | None = Field(default=None, sa_type=Text, nullable=True)
+    track: str = Field(
+        default="memory", sa_type=String, nullable=False, sa_column_kwargs={"server_default": "memory", "default": None}
+    )
 
 
 class SQLiteRecallFileSegmentModel(SQLiteBaseModelMixin, RecallFileSegment):
     """SQLite recall file segment model."""
 
-    recall_file_id: str = Field(sa_column=Column(String, nullable=False, index=True))
-    track: str = Field(default="memory", sa_column=Column(String, nullable=False, server_default="memory"))
-    text: str = Field(sa_column=Column(Text, nullable=False))
+    recall_file_id: str = Field(sa_type=String, nullable=False, index=True)
+    track: str = Field(
+        default="memory", sa_type=String, nullable=False, sa_column_kwargs={"server_default": "memory", "default": None}
+    )
+    text: str = Field(sa_type=Text, nullable=False)
     # Override inherited embedding field: SQLite has no native vector type, so store the
     # vector in a JSON column (a bare ``list`` annotation is not mappable by SQLModel).
-    embedding: list[float] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
+    embedding: list[float] | None = Field(default=None, sa_type=JSON, nullable=True)
 
 
 def _normalize_table_args(table_args: Any) -> tuple[list[Any], dict[str, Any]]:
