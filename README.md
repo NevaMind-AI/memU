@@ -187,6 +187,23 @@ For Local / self-hosted installations, every CLI flag has a matching variable:
 Run `<binary> doctor` to display the resolved mode and verify the same retrieval
 path the host uses.
 
+Local embedding clients (HTTP and SDK) use this proxy precedence:
+
+- HTTP targets: `MEMU_HTTP_PROXY` → `HTTP_PROXY` → `ALL_PROXY` → direct.
+- HTTPS targets: `MEMU_HTTP_PROXY` → `HTTPS_PROXY` → `HTTP_PROXY` → `ALL_PROXY` → direct.
+
+The HTTPS-to-HTTP fallback follows [yt-dlp's compatibility behavior](https://github.com/yt-dlp/yt-dlp/blob/412e7f0a4b0588fe884a02b344ac66a06538475b/yt_dlp/YoutubeDL.py#L4202).
+It is a memU compatibility policy; httpx and curl normally use `ALL_PROXY` as the
+cross-scheme fallback. Standard proxy variables come from the process environment
+(lowercase variants are also supported). For scheduled runs, `config.env` supports
+`MEMU_HTTP_PROXY` and `NO_PROXY` / `no_proxy`; ordinary `HTTP_PROXY`, `HTTPS_PROXY`,
+and `ALL_PROXY` entries in that file are not loaded into the environment.
+
+Without `MEMU_HTTP_PROXY`, loopback targets such as local Ollama always connect
+directly, and `NO_PROXY` exempts matching remote targets from ambient proxies.
+An explicit `MEMU_HTTP_PROXY` overrides both exemptions. Cloud requests retain
+their HTTP client's native environment-proxy selection.
+
 ### Storage backends
 
 | Provider | DSN | Vector search | Use for |
