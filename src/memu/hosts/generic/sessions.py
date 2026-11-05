@@ -136,6 +136,9 @@ class GenericTranscriptSource(TranscriptSource):
             value = entry["payload"].get("timestamp")
         if isinstance(value, str):
             return value
-        if isinstance(value, (int, float)):
-            return _from_epoch(value)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            try:
+                return _from_epoch(value)
+            except (OverflowError, OSError, ValueError):
+                return None
         return None
