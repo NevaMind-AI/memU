@@ -48,6 +48,9 @@ class OpenAIEmbeddingSDKClient:
             response carries token ``usage`` so callers/interceptors can track
             consumption. For batched requests only the last response is returned.
         """
+        if not inputs:
+            return [], None
+
         # Process in batches to handle API limits (e.g., some providers limit batch size)
         if len(inputs) <= self.batch_size:
             # Single batch - direct call
