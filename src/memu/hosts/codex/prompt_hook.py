@@ -106,6 +106,8 @@ def _retrieve(trace: dict[str, Any]) -> None:
         raise ValueError("retrieve must return an object containing result lists")  # noqa: TRY003
     trace["retrieve_result"] = memories
     trace["counts"] = {layer: len(memories.get(layer, [])) for layer in layers}
+    trace["returned_counts"] = dict(trace["counts"])
+    trace["omitted_counts"] = dict.fromkeys(layers, 0)
     empty = not any(trace["counts"].values())
     metadata = {key: trace[key] for key in ("query", "query_source", "extraction_status", "query_kind")}
     context = (

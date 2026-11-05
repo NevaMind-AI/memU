@@ -115,22 +115,38 @@ def test_cli_returns_context_or_fails_open(tmp_path, monkeypatch, capsys, outcom
         return subprocess.CompletedProcess(argv, 0, json.dumps(payload).encode(), b"")
 
     monkeypatch.setattr(hook.subprocess, "run", retrieve)
+
+    def select(prompt, trace):
+        trace.update(query_source="prefix", extraction_status="timeout")
+        return prompt[:2000]
+
+    monkeypatch.setattr(hook, "select_query", select)
     options = ["--rewake"] if rewake else []
     has_context = outcome in ("success", "empty", "filtered")
     assert main(["prompt-hook", "--base-dir", str(tmp_path), *options]) == (2 if rewake and has_context else 0)
     output = capsys.readouterr()
     trace = json.loads(next((tmp_path / "log/hooks/retrieve").glob("*.json")).read_text(encoding="utf-8"))
     argv, kwargs = calls[0]
-    assert argv == [sys.executable, "-m", "memu.hosts.claude_code.cli", "retrieve", "--query-stdin"]
+    assert argv == [
+        sys.executable,
+        "-m",
+        "memu.hosts.claude_code.cli",
+        "retrieve",
+        "--query-stdin",
+        "--query-kind",
+        "long",
+    ]
     assert kwargs["input"].decode("utf-8") == prompt[:2000]
     assert kwargs["env"]["CLAUDE_CODE_SESSION_ID"] == "synthetic-session"
-    assert kwargs["timeout"] == 40
+    assert 0 < kwargs["timeout"] <= 40
     assert trace["query_truncated"]
     if has_context:
         context = output.err.strip() if rewake else json.loads(output.out)["hookSpecificOutput"]["additionalContext"]
         if rewake:
             assert not output.out
         assert context.startswith(hook.CONTEXT_PREFIX)
+        assert trace["additional_context"] == context
+        assert trace["retrieve_result"]["hits"] == ([{"text": "记忆😀"}] if outcome == "success" else [])
         result = json.loads(context[len(hook.CONTEXT_PREFIX) :])
         if outcome == "success":
             assert "记忆😀" in context
@@ -145,6 +161,9 @@ def test_cli_returns_context_or_fails_open(tmp_path, monkeypatch, capsys, outcom
         assert not output.out
         expected = {"empty": "empty_result", "oversized": "budget_exhausted"}.get(outcome, "failed")
         assert trace["status"] == expected
+        if outcome == "oversized":
+            assert trace["retrieve_result"]["hits"] == [{"text": "x" * 10000}]
+            assert trace["additional_context"] is None
 
 
 @pytest.mark.parametrize(

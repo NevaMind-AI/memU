@@ -14,7 +14,7 @@ from memu.hosts.codex.cli import main
 
 
 @pytest.mark.parametrize("outcome", ["success", "empty", "filtered", "failure", "timeout", "invalid"])
-def test_prompt_hook_preserves_query_and_logs(tmp_path, monkeypatch, capsys, outcome):
+def test_prompt_hook_preserves_query_and_logs(tmp_path, monkeypatch, capsys, outcome):  # noqa: C901
     prompt = '  中文 "quoted"\nsecond line  '
     event = {"hook_event_name": "UserPromptSubmit", "session_id": "test-session", "prompt": prompt}
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
@@ -51,6 +51,11 @@ def test_prompt_hook_preserves_query_and_logs(tmp_path, monkeypatch, capsys, out
     records = [json.loads(line) for line in logs[0].read_text(encoding="utf-8").splitlines()]
     assert records[0]["status"] == "started"
     final = records[-1]
+    if "retrieve_result" in final:
+        assert final["returned_counts"] == final["counts"]
+        assert final["omitted_counts"] == {"hits": 0, "resources": 0}
+        assert final["additional_context"] == json.loads(output.out)["hookSpecificOutput"]["additionalContext"]
+        assert len(final["retrieve_result"]["hits"]) == final["counts"]["hits"]
     assert final["session_id"] == "test-session"
     assert final["elapsed_ms"] >= final["retrieve_elapsed_ms"] >= 0
     assert final["query"] == prompt

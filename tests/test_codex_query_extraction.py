@@ -211,7 +211,7 @@ def test_hook_retrieves_extracted_query_with_shared_deadline(tmp_path, monkeypat
     # Isolate the clock from asyncio and account for extraction without actually waiting.
     timer = SimpleNamespace(monotonic=lambda: clock[0])
     monkeypatch.setattr(prompt_hook, "time", timer)
-    monkeypatch.setattr(extraction, "time", timer)
+    monkeypatch.setattr(extraction.query_extraction, "time", timer)
     assert main(["prompt-hook", "--base-dir", str(tmp_path)]) == 0
     assert seen[0]["input"] == b"Windows hook WinError 206"
     assert 0 < seen[0]["timeout"] <= 37
