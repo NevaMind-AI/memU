@@ -24,7 +24,11 @@ def classify_claude_record(record: str) -> RecordKind:
     if isinstance(content, str):
         return RecordKind.OTHER if entry.get("isMeta") else RecordKind.MESSAGE
 
-    kinds = {block.get("type") for block in content if isinstance(block, dict)} if isinstance(content, list) else set()
+    kinds = (
+        {block["type"] for block in content if isinstance(block, dict) and isinstance(block.get("type"), str)}
+        if isinstance(content, list)
+        else set()
+    )
     if "text" in kinds:
         return RecordKind.OTHER if entry.get("isMeta") else RecordKind.MESSAGE
     if kinds & {"tool_use", "tool_result"}:
