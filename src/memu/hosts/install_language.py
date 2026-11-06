@@ -8,6 +8,14 @@ from contextvars import ContextVar
 LANGUAGE: ContextVar[str] = ContextVar("host_install_language", default="en")
 
 _EN = {
+    "pi 扩展安装位置已有非 memU 文件或链接，请检查归属后重试。": "The pi extension location contains an unowned file or symlink; check ownership before retrying.",
+    "配置并检查 pi 扩展": "Configuring and checking the pi extension",
+    "\n👋  欢迎安装 memU · pi": "\n👋  Welcome to memU · pi",
+    "   pi：{path}": "   pi: {path}",
+    "未在 PATH 中找到 pi；请在可运行 pi 的终端中重新安装 memU。": "pi was not found on PATH; rerun memU installation in a terminal where pi is available.",
+    "另一个 pi 扩展安装正在运行，请稍后重试。": "Another pi extension installation is running; retry later.",
+    "pi 扩展回读验证失败，请重新运行安装。": "pi extension readback verification failed; rerun installation.",
+    "在 pi 中运行 /reload 或重新打开会话，启用自动检索和后台记忆。": "Run /reload in pi or open a new session to enable automatic retrieval and background memory.",
     "   请在 cc-switch 等工具中完成配置，按回车重新检查：": "   Configure in cc-switch or another tool, then press Enter to recheck: ",
     "   ← {reply} · {seconds} 秒": "   ← {reply} · {seconds}s",
     "Claude 请求失败（退出码 {code}，{seconds} 秒）。": "Claude request failed (exit {code}, {seconds}s).",

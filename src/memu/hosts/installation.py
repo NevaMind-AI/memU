@@ -105,10 +105,11 @@ def _render_progress(result: dict[str, Any], output: TextIO, *, json_output: boo
         print(json.dumps(result, ensure_ascii=False), file=output, flush=True)
         return
     stage, status = result["stage"], result["status"]
+    total = result.get("total_stages", 5)
     elapsed = result["elapsed_ms"] / 1000
     icon = ("🔎", "🧠", "🛠️", "🔗", "✨")[stage - 1]
     if status == "started":
-        print(f"\n{icon}  {stage}/5  {result['title']}", file=output, flush=True)
+        print(f"\n{icon}  {stage}/{total}  {result['title']}", file=output, flush=True)
     elif status == "passed":
         print(f"   ✅ {text('已完成')} · {elapsed:.1f}s", file=output, flush=True)
     else:
@@ -157,6 +158,7 @@ async def run(
         elapsed = time.monotonic() - started
         result = {
             "stage": stage,
+            "total_stages": len(stages),
             "title": text(stages[stage - 1]),
             "status": status,
             "elapsed_ms": int(elapsed * 1000),
@@ -215,13 +217,14 @@ async def run(
         LANGUAGE.reset(language_token)
 
 
-def add_arguments(parser: argparse.ArgumentParser, host: str) -> None:
+def add_arguments(parser: argparse.ArgumentParser, host: str, *, install_missing: bool = True) -> None:
     """Register the common installation inputs; hosts add their executable selection."""
     parser.add_argument("--language", choices=("en", "zh"))
     parser.add_argument("--non-interactive", action="store_true")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--base-dir", type=Path, default=Path("~/.memu/hosts") / host)
-    parser.add_argument("--install-missing", action="store_true")
+    if install_missing:
+        parser.add_argument("--install-missing", action="store_true")
     parser.add_argument("--backend", choices=("cloud", "local"))
     for name in ("cloud-api-key", "db", "embed-provider", "embed-model", "embed-api-key", "embed-base-url"):
         parser.add_argument("--" + name, default="")
