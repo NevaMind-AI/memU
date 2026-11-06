@@ -70,7 +70,7 @@ def read() -> dict[str, str]:
     return values
 
 
-def write_values(updates: Mapping[str, str]) -> tuple[Path, bool]:
+def write_values(updates: Mapping[str, str], *, comments: str = "") -> tuple[Path, bool]:
     """Merge ``updates`` into the file. Returns its path and whether it changed.
 
     Raises :class:`OSError` rather than swallowing one — every caller here has a
@@ -88,6 +88,9 @@ def write_values(updates: Mapping[str, str]) -> tuple[Path, bool]:
     except FileNotFoundError:
         text, canonical = "", True
     merged = _merged(text, dict(updates))
+    # The first comment line identifies an editable block; retain user edits on reruns.
+    if comments and comments.splitlines()[0] not in merged.splitlines():
+        merged += comments.rstrip() + "\n"
     if merged == text and canonical and path.is_file():
         _restrict(path)
         return path, False

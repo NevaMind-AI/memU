@@ -56,16 +56,15 @@ into a clearer query or focused keywords when that retrieves better (you need no
 pass their raw words verbatim). Use any relevant results as context. If it returns
 nothing, proceed normally.
 
-The result unfolds progressively, in three layers. `segments` are the narrowest
-and usually the most on-point: the individual slices of memory that matched the
-query, each naming in `source_file` the document it was cut from. `files` are
-those synthesized documents — broader, and worth consulting when a segment reads
-as relevant but is too thin to act on; find one by matching a segment's
-`source_file` to it. Each file gives you a summary plus either a `path` to open
-when you need the full text or, if its file is unavailable, the text inline.
-`resources` are files on the user's own machine that look related, each a `path`
-plus a summary. Work from the summaries; open a `path` only when you need what it
-leaves out.
+The result contains `hits` and `resources`. Each hit carries matched `text`
+alongside its source's `description`, `track`, and a `path` to read when the
+excerpt is too thin to act on. A source that cannot be mirrored provides its
+full `content` inline instead. Hits without an available source still retain
+their matched text; source-only hits may have no excerpt. `score` measures the
+match; `created_at` and `updated_at` describe the source file when available.
+`resources` are related files on the user's machine, each a `path` plus a
+`caption`. Work from the excerpts and summaries; open a `path` only when you
+need what they leave out.
 """
 
 # The body is a ``{body}`` slot rather than baked in, so the same document can be

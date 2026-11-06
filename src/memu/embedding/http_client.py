@@ -3,8 +3,8 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import logging
-import os
 import urllib.parse
+import urllib.request
 from collections.abc import Callable
 from typing import Any, Literal
 
@@ -58,13 +58,20 @@ def _load_proxy(base_url: str) -> str | None:
     from memu.env import env as memu_env
 
     explicit = memu_env("MEMU_HTTP_PROXY") or None
-    if is_loopback_url(base_url):
-        # Ambient proxies (HTTP_PROXY, HTTPS_PROXY) are aimed at the network at
-        # large, never at the machine itself. An explicit MEMU_HTTP_PROXY is
-        # different — it states intent about memU's own traffic (e.g. capturing
-        # it with a local debugging proxy) — so it still wins.
+    if explicit or is_loopback_url(base_url):
+        # The application-specific override also allows debugging local traffic.
         return explicit
-    return explicit or os.getenv("HTTP_PROXY") or os.getenv("HTTPS_PROXY") or None
+    target = urllib.parse.urlsplit(base_url)
+    proxies = urllib.request.getproxies_environment()
+    if urllib.request.proxy_bypass(target.netloc):
+        return None
+    # Like yt-dlp, retain HTTP_PROXY as a compatibility fallback for HTTPS.
+    # httpx and curl normally fall back only to ALL_PROXY across schemes.
+    if target.scheme.lower() == "https":
+        return proxies.get("https") or proxies.get("http") or proxies.get("all")
+    if target.scheme.lower() == "http":
+        return proxies.get("http") or proxies.get("all")
+    return None
 
 
 logger = logging.getLogger(__name__)

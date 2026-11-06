@@ -45,3 +45,19 @@ def test_memu_entry_reconfigures_both_streams(monkeypatch: pytest.MonkeyPatch) -
     assert stderr.encoding == "utf-8"
     stderr.flush()
     assert "no such file" in err_buffer.getvalue().decode("utf-8")
+
+
+def test_interrupt_during_host_error_reporting_exits_cleanly(monkeypatch, capsys):
+    from memu import events
+    from memu.hosts import host_cli
+
+    async def fail(spec, args):
+        raise EOFError
+
+    def interrupt():
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(host_cli, "_cmd_doctor", fail)
+    monkeypatch.setattr(events, "flush", interrupt)
+    assert run(SPEC, ["doctor"]) == 130
+    assert "Traceback" not in capsys.readouterr().err

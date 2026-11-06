@@ -99,6 +99,10 @@ async def prepare(
         raise
     events.record_list(started=started, listed=listed, success=True, host=host, session_id_env=session_id_env)
 
+    # Jobs enumerate both tracks even when the store has no files for one of them.
+    for subdir in layout.track_dirs:
+        (layout.base / subdir).mkdir(parents=True, exist_ok=True)
+
     if not layout.memory_manifest.exists():
         snapshot_tracked(layout.base, layout.track_dirs, layout.memory_manifest)
 

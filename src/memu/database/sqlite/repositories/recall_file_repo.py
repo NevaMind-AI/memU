@@ -30,6 +30,7 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
         sqla_models: SQLiteSQLAModels,
         sessions: SQLiteSessionManager,
         scope_fields: list[str],
+        record_model: type[RecallFile] = RecallFile,
     ) -> None:
         """Initialize the recall file repository.
 
@@ -47,6 +48,7 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
             scope_fields=scope_fields,
         )
         self._recall_file_model = recall_file_model
+        self._record_model = record_model
         self.recall_files = self._state.recall_files
 
     def list_recall_files(self, where: Mapping[str, Any] | None = None) -> dict[str, RecallFile]:
@@ -102,7 +104,7 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
 
     def _row_to_recall_file(self, row: Any) -> RecallFile:
         """Map a stored row to a cached :class:`RecallFile` (embedding normalized)."""
-        recall_file = RecallFile(
+        recall_file = self._record_model(
             id=row.id,
             name=row.name,
             description=row.description,
@@ -135,7 +137,7 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
 
             deleted: dict[str, RecallFile] = {}
             for row in rows:
-                recall_file = RecallFile(
+                recall_file = self._record_model(
                     id=row.id,
                     name=row.name,
                     description=row.description,
@@ -228,7 +230,7 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
             session.commit()
             session.refresh(row)
 
-        recall_file = RecallFile(
+        recall_file = self._record_model(
             id=row.id,
             name=row.name,
             description=row.description,
@@ -288,7 +290,7 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
             session.commit()
             session.refresh(row)
 
-        recall_file = RecallFile(
+        recall_file = self._record_model(
             id=row.id,
             name=row.name,
             description=row.description,

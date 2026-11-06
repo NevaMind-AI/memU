@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 from typing import ClassVar
+from uuid import UUID
 
 from memu.hosts.base import RecordKind, TranscriptSource
 
@@ -68,6 +69,13 @@ class CodexTranscriptSource(TranscriptSource):
 
     def root(self) -> Path:
         return self._root
+
+    def session_id(self, path: Path) -> str:
+        """Match rollout filenames to the thread UUID emitted by ``codex exec``."""
+        try:
+            return str(UUID(path.stem[-36:]))
+        except ValueError:
+            return path.stem
 
     def sanitize(self, path: Path, record: str) -> str:
         """Remove known runtime metadata without projecting the response item."""

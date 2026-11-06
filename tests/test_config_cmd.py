@@ -183,6 +183,21 @@ def test_no_logical_update_still_migrates_legacy_encoding(config: pathlib.Path) 
 # --------------------------------------------------------------------------- #
 
 
+@pytest.mark.parametrize("arguments", [["init"], ["init", "--cloud-api-key", "sk-1"], ["config", "--cloud"]])
+def test_config_commands_add_editable_retrieval_comments_once(config: pathlib.Path, arguments: list[str]) -> None:
+    assert run(SPEC, arguments) == 0
+    text = config.read_text(encoding="utf-8")
+    assert "# MEMU_CLOUD_RETRIEVE_MIN_SCORE_SHORT=0.55" in text
+    assert "# MEMU_LOCAL_RETRIEVE_MIN_SCORE_SHORT=<your-calibrated-score>" in text
+    assert not any("RETRIEVE_MIN_SCORE" in key for key in config_file.read())
+    # An edited template and explicit overrides survive repeated initialization.
+    edited = text.replace("# MEMU_CLOUD_RETRIEVE_MIN_SCORE_SHORT=0.55", "# my calibration note")
+    edited += "MEMU_CLOUD_RETRIEVE_MIN_SCORE_SHORT=0.67\nMEMU_LOCAL_RETRIEVE_MIN_SCORE_LONG=0.71\n"
+    config.write_text(edited, encoding="utf-8")
+    assert run(SPEC, arguments) == 0
+    assert config.read_text(encoding="utf-8") == edited
+
+
 def test_bare_init_writes_local_and_a_client_id(config: pathlib.Path) -> None:
     assert run(SPEC, ["init"]) == 0
 

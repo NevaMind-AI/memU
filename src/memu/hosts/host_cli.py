@@ -37,13 +37,13 @@ from pathlib import Path
 from typing import Any, Literal
 
 from memu import events
-from memu.hosts import config_cmd, instruction, retrieval, templates
+from memu.hosts import config_cmd, hooks, instruction, retrieval, templates
 from memu.hosts.base import TranscriptSource
 from memu.hosts.bridging import Layout, commit, prepare, self_sessions
 from memu.hosts.bridging.pipeline import MAX_JOBS
 from memu.hosts.bridging.resources import verify_resource_log
 
-ScheduleBackend = Literal["os", "native", "external"]
+ScheduleBackend = Literal["os", "native", "external", "hook"]
 """The existing scheduler arrangement a host documents; informational only."""
 
 DOCS = {"install": "INSTALL.md", "task": "BRIDGING_TASK.md", "uninstall": "UNINSTALL.md"}
@@ -202,6 +202,9 @@ class HostSpec:
     Native schedulers can instead resolve their registered task from structural
     host metadata, without asking the model to carry identity.
     """
+
+    hook: Any = None
+    """Optional host-triggered notify hook. Hook-specific behavior is opt-in."""
 
     def __post_init__(self) -> None:
         if not _TASK_NAME_RE.fullmatch(self.task_name):
@@ -613,6 +616,21 @@ def _proxy_hint(base_url: str) -> str | None:
 
 
 async def _cmd_doctor(spec: HostSpec, args: argparse.Namespace) -> int:
+    backend_status = await _cmd_backend_doctor(spec, args)
+    if spec.host in {"codex", "claude-code"} and not getattr(args, "backend_only", False):
+        if spec.host == "codex":
+            from memu.hosts.codex.doctor import check
+        else:
+            from memu.hosts.claude_code.doctor import check as check_claude
+
+            check = check_claude
+
+        integration_status = check()
+        return int(bool(backend_status or integration_status))
+    return backend_status
+
+
+async def _cmd_backend_doctor(spec: HostSpec, args: argparse.Namespace) -> int:
     """Prove config resolves and the selected backend answers.
 
     Deliberately exercises the same call the inject hook will, so a green doctor
@@ -636,7 +654,7 @@ async def _cmd_doctor(spec: HostSpec, args: argparse.Namespace) -> int:
             if hint:
                 print(hint, file=sys.stderr)
         return 1
-    found = sum(len(result.get(layer, [])) for layer in ("segments", "files", "resources"))
+    found = events.counts(result, layers=("hits", "resources"))
     print(f"config    {os.path.expanduser(CONFIG_ENV)}")
     print(f"mode      {mode}")
     if mode == "cloud":
@@ -696,6 +714,40 @@ def _report_guide_opened(spec: HostSpec, event: str) -> None:
     """
     events.record(event, host=spec.host, session_id_env=spec.session_id_env)
     events.flush()
+
+
+async def _cmd_hook_run(spec: HostSpec, args: argparse.Namespace) -> int:
+    if spec.host in {"codex", "claude-code"}:
+        if spec.host == "codex":
+            from memu.hosts.codex.notify_console import memorize_run
+        else:
+            from memu.hosts.claude_code.memorize_hook import memorize_run
+
+        with memorize_run(_layout(spec, args)) as admitted:
+            if not admitted:
+                return 0
+            code = 1
+            try:
+                code = await _run_hook_pipeline(spec, args)
+                return code
+            finally:
+                print(f"=== MEMORIZE status={'failed' if code else 'succeeded'} ===", flush=True)
+    return await _run_hook_pipeline(spec, args)
+
+
+async def _run_hook_pipeline(spec: HostSpec, args: argparse.Namespace) -> int:
+    hook = spec.hook
+    if hook is None:
+        raise RuntimeError(f"{spec.display} has no notify hook")  # noqa: TRY003
+    layout = _layout(spec, args)
+    code = await _cmd_prepare(spec, args)
+    if code:
+        return code
+    if hooks.pending_jobs(layout):
+        if args.console and hook.stream_output is None:
+            raise ValueError(f"{spec.display} has no live agent output")  # noqa: TRY003
+        hooks.run_agent(hook.agent, layout, executable=args.agent, stream_output=hook.stream_output)
+    return await _cmd_commit(spec, args)
 
 
 async def _cmd_schedule(spec: HostSpec, args: argparse.Namespace) -> int:
@@ -893,7 +945,18 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
     )
     p.set_defaults(handler=bind(_cmd_verify_resources))
 
-    p = sub.add_parser("doctor", help="Verify MEMU_* config resolves and the selected memory backend is reachable")
+    p = sub.add_parser(
+        "doctor",
+        help=(
+            f"Check backend, standalone {spec.display} CLI and local hook definitions"
+            if spec.host in {"codex", "claude-code"}
+            else "Verify MEMU_* config resolves and the selected memory backend is reachable"
+        ),
+    )
+    if spec.host in {"codex", "claude-code"}:
+        p.add_argument(
+            "--backend-only", action="store_true", help="Check only the memory backend (installer preflight)"
+        )
     p.set_defaults(handler=bind(_cmd_doctor))
 
     p = sub.add_parser("docs", help="Print a packaged agent-facing guide")
@@ -922,6 +985,17 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
     if spec.register_extra is not None:
         spec.register_extra(sub)
 
+    if spec.hook is not None:
+        hook = spec.hook
+        p = with_base(sub.add_parser("hook-run", help="Run one background memorization pass"))
+        p.add_argument("--session-dir", default=spec.session_dir, help=spec.session_help)
+        p.add_argument("--max-jobs", type=int, default=MAX_JOBS)
+        p.add_argument("--agent", default="", help=f"Path to {hook.agent.argv[0]}")
+        p.add_argument(
+            "--console", action="store_true", help="Tee agent output to the run log and the foreground terminal"
+        )
+        p.set_defaults(handler=bind(_cmd_hook_run))
+
     return parser
 
 
@@ -929,6 +1003,9 @@ def run(spec: HostSpec, argv: list[str] | None = None) -> int:
     # Piped stdio on Windows falls back to the ANSI code page (gbk, cp1252, …),
     # which cannot encode the guides' ✅ or stored memory content — and agents
     # read every command through a pipe. Force UTF-8; on UTF-8 stdio it's a no-op.
+    reconfigure_input = getattr(sys.stdin, "reconfigure", None)
+    if reconfigure_input is not None:
+        reconfigure_input(encoding="utf-8", errors="strict")
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
         if reconfigure is not None:
@@ -963,7 +1040,10 @@ def run(spec: HostSpec, argv: list[str] | None = None) -> int:
         # already delivered its own `memory_search_failed` envelope by now, which is
         # the bounded way to say the same thing. Only this `cli_error` waits.
         if command != "retrieve":
-            events.flush()
+            try:
+                events.flush()
+            except KeyboardInterrupt:
+                return 130
         if os.environ.get("MEMU_DEBUG") == "1":
             raise
         print(f"error: {exc} (set MEMU_DEBUG=1 for a traceback)", file=sys.stderr)

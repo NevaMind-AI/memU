@@ -19,7 +19,7 @@ Usage:
     memu-codex prepare               # slice new sessions into job files
     memu-codex verify-resources      # filter the touched-file log (run by a job)
     memu-codex commit                # submit what the agent produced back to memU
-    memu-codex doctor                # check config + store before relying on them
+    memu-codex doctor                # check backend, standalone CLI and hook definitions
     memu-codex docs install          # print the agent-facing install guide
     memu-codex docs uninstall        # print the agent-facing removal guide
 """
@@ -29,6 +29,17 @@ from __future__ import annotations
 import argparse
 import sys
 
+from memu.hosts import hooks
+from memu.hosts.codex import (
+    cli_prepare,
+    hook_status,
+    install,
+    memorize_hook,
+    notify_console,
+    prompt_hook,
+    prompt_hook_install,
+    uninstall,
+)
 from memu.hosts.codex.sessions import SESSION_DIR, CodexTranscriptSource
 from memu.hosts.host_cli import HostSpec, run
 
@@ -42,8 +53,36 @@ AGENTS_MD = "~/.codex/AGENTS.md"
 lands here. The path is the only part of that seam that is Codex-specific."""
 
 SKILLS_DIR = "~/.codex/skills"
-"""Codex's skills directory. Because it exists, the AGENTS.md block is a pointer
-and the retrieval procedure itself is installed here as a skill."""
+"""Codex's skills directory."""
+
+HOOK = hooks.HookSpec(
+    agent=hooks.HeadlessAgent(
+        argv=(
+            "codex",
+            "exec",
+            "-c",
+            "notify=[]",
+            "--json",
+            "--skip-git-repo-check",
+            "--dangerously-bypass-approvals-and-sandbox",
+            "-C",
+            "{base}",
+            "-",
+        )
+    ),
+    stream_output=notify_console.stream_agent,
+)
+
+
+def _register_extra(sub: object) -> None:
+    install.register(sub)
+    uninstall.register(sub)
+    cli_prepare.register(sub)
+    prompt_hook.register(sub)
+    memorize_hook.register(sub)
+    hook_status.register(sub)
+    prompt_hook_install.register(sub)
+
 
 SPEC = HostSpec(
     host=HOST,
@@ -57,6 +96,14 @@ SPEC = HostSpec(
     instruction_path=AGENTS_MD,
     skills_dir=SKILLS_DIR,
     schedule_backend="native",
+    hook=HOOK,
+    install_hint=(
+        "Install the standalone Codex CLI using the official native installer:\n"
+        "  Windows (PowerShell): irm https://chatgpt.com/codex/install.ps1 | iex\n"
+        "  macOS/Linux: curl -fsSL https://chatgpt.com/codex/install.sh | sh\n"
+        "Refresh PATH, verify `codex --version`, then retry `memu-codex install-prompt-hook`."
+    ),
+    register_extra=_register_extra,
 )
 
 

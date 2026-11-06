@@ -29,6 +29,7 @@ class SQLiteRecallFileSegmentRepo(SQLiteRepoBase, RecallFileSegmentRepo):
         sqla_models: SQLiteSQLAModels,
         sessions: SQLiteSessionManager,
         scope_fields: list[str],
+        record_model: type[RecallFileSegment] = RecallFileSegment,
     ) -> None:
         super().__init__(
             state=state,
@@ -37,10 +38,11 @@ class SQLiteRecallFileSegmentRepo(SQLiteRepoBase, RecallFileSegmentRepo):
             scope_fields=scope_fields,
         )
         self._recall_file_segment_model = recall_file_segment_model
+        self._record_model = record_model
         self.segments = self._state.segments
 
     def _row_to_record(self, row: Any) -> RecallFileSegment:
-        return RecallFileSegment(
+        return self._record_model(
             id=row.id,
             recall_file_id=row.recall_file_id,
             track=row.track,

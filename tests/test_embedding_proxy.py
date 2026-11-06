@@ -75,7 +75,86 @@ def test_remote_urls_are_not(url: str) -> None:
 def test_ambient_proxy_is_ignored_for_loopback(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HTTP_PROXY", PROXY)
     assert _load_proxy("http://localhost:11434/v1") is None
+    assert _load_proxy("http://api.openai.com/v1") == PROXY
     assert _load_proxy("https://api.openai.com/v1") == PROXY
+
+
+def test_ambient_proxy_matches_target_scheme(monkeypatch: pytest.MonkeyPatch) -> None:
+    https_proxy = "http://secure-proxy.corp:8443"
+    monkeypatch.setenv("HTTP_PROXY", PROXY)
+    monkeypatch.setenv("HTTPS_PROXY", https_proxy)
+
+    assert _load_proxy("http://api.example.com/v1") == PROXY
+    assert _load_proxy("https://api.example.com/v1") == https_proxy
+
+    http_client = HTTPEmbeddingClient(base_url="http://api.example.com/v1", api_key="x", embed_model="m")
+    https_client = HTTPEmbeddingClient(base_url="https://api.example.com/v1", api_key="x", embed_model="m")
+    assert http_client.proxy == PROXY
+    assert https_client.proxy == https_proxy
+
+
+@pytest.mark.parametrize(
+    ("scheme", "settings", "expected"),
+    [
+        ("http", {}, None),
+        ("https", {}, None),
+        ("http", {"HTTPS_PROXY": PROXY}, None),
+        ("https", {"HTTP_PROXY": PROXY}, PROXY),
+        ("http", {"ALL_PROXY": PROXY}, PROXY),
+        ("https", {"ALL_PROXY": PROXY}, PROXY),
+        ("https", {"HTTP_PROXY": PROXY, "ALL_PROXY": "http://other:8080"}, PROXY),
+        ("http", {"HTTP_PROXY": PROXY, "ALL_PROXY": "http://other:8080"}, PROXY),
+        ("https", {"http_proxy": PROXY}, PROXY),
+        ("https", {"HTTPS_PROXY": PROXY, "NO_PROXY": "example.com"}, None),
+        ("https", {"HTTP_PROXY": PROXY, "no_proxy": ".example.com"}, None),
+        ("http", {"ALL_PROXY": PROXY, "NO_PROXY": "*"}, None),
+        ("https", {"HTTPS_PROXY": PROXY, "NO_PROXY": "other.example.com"}, PROXY),
+        ("https", {"MEMU_HTTP_PROXY": PROXY, "NO_PROXY": "*"}, PROXY),
+    ],
+)
+def test_proxy_fallback_and_exemptions(
+    monkeypatch: pytest.MonkeyPatch, scheme: str, settings: dict[str, str], expected: str | None
+) -> None:
+    for key, value in settings.items():
+        monkeypatch.setenv(key, value)
+    assert _load_proxy(f"{scheme}://api.example.com/v1") == expected
+
+
+@pytest.mark.parametrize("bypass", [False, True])
+async def test_http_and_sdk_transports_share_https_fallback(monkeypatch: pytest.MonkeyPatch, bypass: bool) -> None:
+    monkeypatch.setenv("HTTP_PROXY", PROXY)
+    if bypass:
+        monkeypatch.setenv("NO_PROXY", "example.com")
+    url = "https://api.example.com/v1"
+    http = HTTPEmbeddingClient(base_url=url, api_key="x", embed_model="m")
+    sdk = OpenAIEmbeddingSDKClient(base_url=url, api_key="x", embed_model="m")
+    try:
+        async with httpx.AsyncClient(proxy=http.proxy, mounts=http.mounts) as transport:
+            for inner in (transport, sdk.client._client):
+                selected = inner._transport_for_url(httpx.URL(url))
+                assert (selected is inner._transport) == bypass
+    finally:
+        await sdk.client.close()
+
+
+def test_no_proxy_from_config_bypasses_ambient_proxy(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) -> None:
+    config = tmp_path / "config.env"
+    config.write_text("NO_PROXY=example.com\n", encoding="utf-8")
+    monkeypatch.setenv("MEMU_CONFIG_ENV", str(config))
+    monkeypatch.setenv("HTTPS_PROXY", PROXY)
+    # Account for the loader's setdefault write when monkeypatch restores the environment.
+    monkeypatch.setenv("NO_PROXY", "")
+    monkeypatch.delenv("NO_PROXY")
+    assert _load_proxy("https://api.example.com/v1") is None
+
+
+def test_explicit_memu_proxy_takes_precedence_over_both_schemes(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HTTP_PROXY", "http://http-proxy.corp:8080")
+    monkeypatch.setenv("HTTPS_PROXY", "http://https-proxy.corp:8443")
+    monkeypatch.setenv("MEMU_HTTP_PROXY", PROXY)
+
+    assert _load_proxy("http://api.example.com/v1") == PROXY
+    assert _load_proxy("https://api.example.com/v1") == PROXY
 
 
 def test_explicit_memu_proxy_wins_even_for_loopback(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -104,7 +183,7 @@ def test_http_client_bypasses_ambient_proxy_for_loopback(monkeypatch: pytest.Mon
     assert local.proxy is None
     assert local.mounts == {"all://localhost": None}
 
-    remote = HTTPEmbeddingClient(base_url="https://api.openai.com/v1", api_key="x", embed_model="m")
+    remote = HTTPEmbeddingClient(base_url="http://api.openai.com/v1", api_key="x", embed_model="m")
     assert remote.proxy == PROXY
     assert remote.mounts is None
 
