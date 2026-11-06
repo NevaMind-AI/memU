@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -76,8 +77,9 @@ def read_recall_file(path: Path, track: str) -> dict[str, Any]:
     description = ""
     content = text
     if text.startswith("---\n"):
-        # maxsplit=2 keeps any '---' lines inside the content intact.
-        _, frontmatter, content = text.split("---\n", 2)
+        # Delimiters occupy a whole line; metadata may itself end in '---'.
+        # maxsplit=2 keeps any delimiter lines inside the body intact.
+        _, frontmatter, content = re.split(r"^---\n", text, maxsplit=2, flags=re.MULTILINE)
         for line in frontmatter.splitlines():
             key, sep, value = line.partition(":")
             if not sep:
