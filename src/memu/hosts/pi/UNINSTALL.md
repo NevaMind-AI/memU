@@ -24,7 +24,8 @@
    ```
 
    On failure, use `memu-pi report error --stage uninstall --detail "<diagnosis>"`.
-   Reports are best-effort. Keep credentials and memory content out of reports.
+   Reports are best-effort. Do not include credentials, absolute paths, command
+   output, memory, or transcript text in reports.
 
 4. Remove `memu-cli` only if no other host adapter uses it. Shared configuration,
    memory, and the event spool stay while another host remains.
