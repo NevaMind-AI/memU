@@ -118,23 +118,25 @@ def test_installed_pi_memorize_and_retrieve(tmp_path):  # noqa: C901
         text=True,
         encoding="utf-8",
     )
-    output = queue.Queue()
+    stdin, stdout, stderr = process.stdin, process.stdout, process.stderr
+    assert stdin is not None and stdout is not None and stderr is not None
+    output: queue.Queue[dict] = queue.Queue()
     errors = []
     events = []
 
     def read_output():
-        for line in process.stdout:
+        for line in stdout:
             try:
                 output.put(json.loads(line))
             except ValueError:
                 errors.append(line)
 
     threading.Thread(target=read_output, daemon=True).start()
-    threading.Thread(target=lambda: errors.extend(process.stderr.readlines()), daemon=True).start()
+    threading.Thread(target=lambda: errors.extend(stderr.readlines()), daemon=True).start()
 
     def send(payload):
-        process.stdin.write(json.dumps(payload) + "\n")
-        process.stdin.flush()
+        stdin.write(json.dumps(payload) + "\n")
+        stdin.flush()
 
     log = None
     try:
@@ -206,7 +208,7 @@ def test_installed_pi_memorize_and_retrieve(tmp_path):  # noqa: C901
                         os.killpg(int(pid), signal.SIGKILL)
         try:
             send({"type": "abort"})
-            process.stdin.close()
+            stdin.close()
             process.wait(timeout=3)
         except (OSError, subprocess.TimeoutExpired):
             process.terminate()
