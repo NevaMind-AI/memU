@@ -1,132 +1,65 @@
 # Install memU for pi
 
-## Task identity
+<!-- memu-pi-install: extension-v1 -->
+<!-- {{task_name}} | {{former_task_names}} | {{all_task_names}} -->
 
-- Current task name: `{{task_name}}`
-- Former task names: {{former_task_names}}
-- Names recognized during migration and removal: {{all_task_names}}
+> **Audience: the agent.** Use the installer below and report its result. Reuse
+> the user's existing pi environment and shared memU backend.
 
-> **Audience: the agent.** Work top to bottom. Do not continue past a failing
-> verify gate. Finish or abandon the run by reporting the outcome at the end.
+## Install
 
-Installing memU for pi has three parts: configure the shared memory backend,
-schedule pi to bridge new sessions, and add the retrieval skill to pi's global
-instructions.
-
-## Part 1 — Install and configure memU
+With memu-cli installed and pi available on PATH, run:
 
 ```sh
-pip install --upgrade memu-cli
-memu-pi --help
+memu-pi install --non-interactive --language en
 ```
 
-`--upgrade` matters: an existing older package otherwise stays installed. If
-`memu-pi` is missing, the installed package predates this adapter or its scripts
-directory is not on `PATH`.
+The installer checks pi and the extension destination, configures or reuses the
+shared memory backend, verifies retrieval, and installs the packaged extension.
+It reads back the extension to verify the Python executable and working directory.
 
-Create the shared memU configuration. If `SKILL.md` already ran `init`, reusing
-the existing mode is correct and re-running is harmless:
+Pass any backend inputs the user supplied to this invocation. For a new Cloud
+configuration:
 
 ```sh
-memu-pi init --cloud-api-key <the user's memU key>
+memu-pi install --non-interactive --language en --backend cloud --cloud-api-key <memu-api-key>
 ```
 
-Use bare `memu-pi init` for local memory. Never edit `~/.memu/config.env` by
-hand. Inspect it with `memu-pi config show`; reuse an existing backend from
-another host. Otherwise configure exactly one:
+For local memory, supply an absolute database path and the embedding settings:
 
 ```sh
-memu-pi config --cloud --cloud-api-key <memu-api-key>
-memu-pi config --local --db /absolute/path/memu.sqlite3 --embed-provider openai --embed-api-key <key>
+memu-pi install --non-interactive --language en --backend local --db /absolute/path/memu.sqlite3 --embed-provider openai --embed-api-key <embedding-key>
 ```
 
-Give `--db` an absolute path. Shell-only environment variables do not reach a
-scheduled run.
+Use `--embed-model` and `--embed-base-url` when the embedding service requires
+them. Existing backend settings from another host are reused by default.
+Configuration is written through memU's configuration commands.
 
-### Verify Part 1
+Use `--language zh` when the user explicitly requests Chinese. Interactive
+terminal users can run bare `memu-pi install`. Add `--json` for machine-readable
+progress; exit code zero and a final `complete: true` indicate success.
 
-```sh
-memu-pi doctor
+## Activate
+
+Run `/reload` in pi or open a new session. The extension is installed at:
+
+```text
+~/.pi/agent/extensions/memu-retrieval.ts
 ```
 
-The command must exit cleanly. Zero retrieval hits is normal for a new store.
+`PI_CODING_AGENT_DIR` selects a custom pi agent directory. `--base-dir` selects
+memU's working directory, defaulting to `~/.memu/hosts/pi`.
 
-## Part 2 — Register the record bridge
+User submissions start retrieval in the background. Once the answer and pending
+retrieval have settled, saved conversations can be processed into durable memory
+by a background pi worker. The worker uses the active session's model.
 
-Pi stores v3 JSONL sessions below `~/.pi/agent/sessions`. The adapter keeps
-user and assistant text, routes tool calls and results to the full transcript,
-and ignores session, compaction, model, and thinking metadata. The scheduled
-bridge only supports this default layout.
+## Report
 
-**Refresh an existing bridging registration before continuing.** Check cron or
-launchd for `hosts/pi/bridge\.sh|memU bridging pipeline`, or Task Scheduler for
-`{{task_name}}`. Record its cadence and remove **only** that registration, then
-verify it is gone. An absent registration is the normal first-install case.
-Reuse the recorded cadence unless the user requested a change.
+Tell the user the selected backend, that extension readback verification passed,
+and that `/reload` or a new session activates automatic retrieval and background
+memory. Report a partial setup if the installer stops before completion, and
+include its actionable diagnostic. Keep credentials and memory content out of
+reports.
 
-Follow the packaged scheduler procedure:
-
-```sh
-memu-pi docs task
-```
-
-### Verify Part 2
-
-```sh
-memu-pi prepare
-```
-
-It must report a session count. Zero is correct when no new turns exist.
-
-## Part 3 — Install retrieval
-
-Pi loads one global context file from its agent directory. Normally that is
-`~/.pi/agent/AGENTS.md`; if `AGENTS.override.md` already exists there, it takes
-precedence, so target that file instead.
-
-Default installation:
-
-```sh
-memu-pi install-instruction
-```
-
-Custom or override installation:
-
-```sh
-memu-pi install-instruction --path <agent-dir>/AGENTS.override.md --skills-dir <agent-dir>/skills
-```
-
-The command creates `skills/memu-retrieve/SKILL.md` and adds one managed pointer
-block to the selected global context file. Existing content is preserved;
-re-running is idempotent.
-
-### Verify Part 3
-
-```sh
-memu-pi retrieve "smoke test"
-```
-
-Confirm the managed block occurs once, the skill exists, and a fresh pi session
-loads the selected context file. Empty result lists are valid.
-
-## Report the outcome to memU
-
-Every gate passed:
-
-```sh
-memu-pi report install
-```
-
-If the run stops early:
-
-```sh
-memu-pi report error --stage install --detail "<what failed, what was tried, and the likely cause>"
-```
-
-The report is best-effort. Do not include credentials, absolute paths, memory,
-transcript text, or raw command output.
-
-## Done
-
-Tell the user which backend was selected, where the schedule was registered,
-its cadence, and that retrieval takes effect in the next pi session.
+To remove the extension, run `memu-pi remove-prompt-hook` and reload pi.

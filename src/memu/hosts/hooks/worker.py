@@ -54,6 +54,7 @@ def stream_agent(
     *,
     env: dict[str, str],
     on_output: Callable[[str], None] | None = None,
+    stdin: int | None = None,
 ) -> None:
     """Stream full output once; kill the agent tree before releasing the caller."""
     # A file for stdin avoids a write/read pipe deadlock before the reader starts.
@@ -72,7 +73,7 @@ def stream_agent(
         with subprocess.Popen(  # noqa: S603
             argv,
             env=env,
-            stdin=source,
+            stdin=source if stdin is None else stdin,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             cwd=layout.base,

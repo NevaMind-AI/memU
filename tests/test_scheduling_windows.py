@@ -481,7 +481,6 @@ def test_hermes_guide_migrates_native_job_before_os_registration() -> None:
         ("openclaw", "memu-openclaw", ".cron_job.openclaw.json"),
         ("workbuddy", "memu-workbuddy", "WorkBuddy's automation list"),
         ("cola", "memu-cola", "{{all_task_names}}"),
-        ("pi", "memu-pi", r"hosts/pi/bridge\.sh|memU bridging pipeline"),
     ],
 )
 def test_install_refreshes_existing_bridge_before_registration(pkg: str, binary: str, identity: str) -> None:
@@ -562,11 +561,6 @@ def test_openclaw_task_recreates_confirmed_bridge() -> None:
                 "memu-agent commit",
             ),
             ("hosts/agent/bridge\\.sh|memU bridging pipeline", "memu-agent prepare --session-dir …"),
-        ),
-        (
-            "pi",
-            ("$HOME/.memu/hosts/pi/bridge.sh", "{{task_name}}"),
-            ("hosts/pi/bridge.sh", "schedule uninstall"),
         ),
     ],
 )

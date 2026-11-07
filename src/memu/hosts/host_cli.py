@@ -27,6 +27,7 @@ import json
 import os
 import platform
 import re
+import shlex
 import sys
 import time
 import urllib.request
@@ -227,7 +228,8 @@ class HostSpec:
     @property
     def verify_command(self) -> str:
         """What the resource job tells the agent to run. A command, never a path."""
-        return f"{self.binary} verify-resources"
+        binary = f"{self.binary}.exe" if sys.platform == "win32" else self.binary
+        return f"{binary} verify-resources"
 
     @property
     def default_base_dir(self) -> str:
@@ -332,7 +334,7 @@ async def _cmd_prepare(spec: HostSpec, args: argparse.Namespace) -> int:
     num_sessions = await prepare(
         source,
         layout,
-        verify_command=spec.verify_command,
+        verify_command=f"{spec.verify_command} --base-dir {shlex.quote(str(layout.base))}",
         max_jobs=args.max_jobs,
         skip_sessions=skip_sessions,
         # Carried purely so the `memory_list` event the store mirror records can
@@ -717,9 +719,11 @@ def _report_guide_opened(spec: HostSpec, event: str) -> None:
 
 
 async def _cmd_hook_run(spec: HostSpec, args: argparse.Namespace) -> int:
-    if spec.host in {"codex", "claude-code"}:
+    if spec.host in {"codex", "claude-code", "pi"}:
         if spec.host == "codex":
             from memu.hosts.codex.notify_console import memorize_run
+        elif spec.host == "pi":
+            from memu.hosts.pi.memorize_hook import memorize_run
         else:
             from memu.hosts.claude_code.memorize_hook import memorize_run
 
@@ -953,7 +957,7 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
             else "Verify MEMU_* config resolves and the selected memory backend is reachable"
         ),
     )
-    if spec.host in {"codex", "claude-code"}:
+    if spec.host in {"codex", "claude-code", "pi"}:
         p.add_argument(
             "--backend-only", action="store_true", help="Check only the memory backend (installer preflight)"
         )
