@@ -17,7 +17,7 @@ We welcome all types of contributions:
 
 ## 🤝 Community Tasks
 
-Browse the [community task catalog (中文)](docs/community/tasks.md) for task scope,
+Browse the community task catalog ([English](docs/community/tasks.en.md) / [简体中文](docs/community/tasks.md)) for task scope,
 difficulty, and acceptance criteria. Claim a task by its stable ID in
 [issue #790](https://github.com/NevaMind-AI/memU/issues/790), where maintainers confirm
 assignments and track progress. Larger design discussions can use a separate RFC

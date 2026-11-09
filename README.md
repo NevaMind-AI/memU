@@ -214,7 +214,7 @@ service = MemoryService(
 ```
 ## Community contributions
 
-Explore the [community tasks (中文)](docs/community/tasks.md) and claim a task in
+Explore the community tasks ([English](docs/community/tasks.en.md) / [简体中文](docs/community/tasks.md)) and claim a task in
 [issue #790](https://github.com/NevaMind-AI/memU/issues/790). Each task has a stable
 link, a difficulty rating, and acceptance criteria. See [CONTRIBUTING.md](CONTRIBUTING.md)
 for development and PR guidelines.
