@@ -165,7 +165,7 @@ background; results enter the model context and resume an idle agent. After the
 user turn and pending retrieval settle, a background worker processes the saved
 conversation into memory using the active session's model. Workers share a lock
 and a 30-minute cooldown. The installer replaces memU's managed retrieval
-instruction and skill with the extension. Run `memu-pi remove-prompt-hook` and
+instruction and skill with the extension. Run `memu-pi uninstall` and
 reload to remove it.
 
 Host retrieval returns compact JSON with at most five self-contained `hits` plus independent `resources`. Each hit combines matched `text` with its source's `description`, `track`, and local mirror `path` (or inline `content` when no mirror is available). Its `score` describes the matched segment; `created_at` and `updated_at` describe the source file when available. Hits retain segment order, including excerpts whose source is missing; sources without matched excerpts remain source-only hits. Resources contain `path`, `caption`, and available scores/timestamps. Database IDs and scope metadata are omitted from the agent-facing output.

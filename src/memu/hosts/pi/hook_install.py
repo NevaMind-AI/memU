@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from memu.hosts import instruction
+from memu.hosts.hooks.admission import workspace_lock
 from memu.hosts.pi import memorize_hook
 from memu.hosts.pi.prompt_hook import prompt_hook
 
@@ -62,19 +63,27 @@ async def _install(args: argparse.Namespace) -> int:
 
 
 async def _remove(args: argparse.Namespace) -> int:
-    del args
-    target = agent_dir() / "extensions/memu-retrieval.ts"
-    if target.is_symlink():
-        raise ValueError("Refusing to remove a symlinked pi extension")  # noqa: TRY003
-    if target.exists():
-        if not target.read_text(encoding="utf-8").startswith(MARKER):
-            raise ValueError("Refusing to remove an unowned pi extension")  # noqa: TRY003
-        target.unlink()
-    print("Removed memU extension. Run /reload or open a new pi session.")
+    lock = agent_dir() / ".memu-hooks-lock"
+    lock.mkdir(parents=True, exist_ok=True)
+    with workspace_lock(lock) as acquired:
+        if not acquired:
+            print("Another pi extension update is running", file=sys.stderr)
+            return 2
+        destination = target()
+        removed = int(destination.exists())
+        destination.unlink(missing_ok=True)
+    notice = "Run /reload or open a new pi session to unload the memU extension."
+    if getattr(args, "json", False):
+        print(json.dumps({"status": "passed", "removed": removed, "notice": notice}))
+    else:
+        print(f"Removed {removed} memU extension(s). {notice}")
     return 0
 
 
 def register(sub: Any) -> None:
+    parser = sub.add_parser("uninstall", help="Remove memU's pi extension; preserve pi settings and memory")
+    parser.add_argument("--json", action="store_true")
+    parser.set_defaults(handler=_remove)
     memorize_hook.register(sub)
     for name, handler, help_text in (
         ("install-prompt-hook", _install, "Install pi's asynchronous retrieval and memorization extension"),

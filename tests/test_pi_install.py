@@ -7,6 +7,7 @@ import pytest
 
 from memu import config_file
 from memu.hosts import installation, templates
+from memu.hosts.hooks.admission import workspace_lock
 from memu.hosts.pi import hook_install, install
 from memu.hosts.pi.cli import main
 
@@ -125,3 +126,31 @@ def test_pi_guides_use_the_installed_extension_contract(tmp_path, monkeypatch, f
     monkeypatch.setattr(templates, "_docs_cache_dir", lambda _: tmp_path)
     (tmp_path / filename).write_text(old, encoding="utf-8")
     assert templates.resolve_doc("pi", filename, embedded) == embedded
+
+
+def test_cli_uninstall_preserves_data_and_is_idempotent(machine, capsys):
+    home, base, _ = machine
+    hook_install.install(base)
+    preserved = home / "auth.json"
+    preserved.write_text("private settings", encoding="utf-8")
+    for expected in (1, 0):
+        assert main(["uninstall", "--json"]) == 0
+        result = json.loads(capsys.readouterr().out)
+        assert result["removed"] == expected
+        assert "/reload" in result["notice"]
+        assert preserved.read_text(encoding="utf-8") == "private settings"
+    foreign = home / "extensions/memu-retrieval.ts"
+    foreign.write_text("user extension", encoding="utf-8")
+    assert main(["uninstall"]) == 1
+    assert foreign.read_text(encoding="utf-8") == "user extension"
+
+
+def test_cli_uninstall_respects_extension_lock(machine):
+    home, base, _ = machine
+    destination = hook_install.install(base)
+    lock = home / ".memu-hooks-lock"
+    lock.mkdir()
+    with workspace_lock(lock) as acquired:
+        assert acquired
+        assert main(["uninstall"]) == 2
+    assert destination.exists()
