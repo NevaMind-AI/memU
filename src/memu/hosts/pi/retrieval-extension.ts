@@ -78,7 +78,13 @@ export default function (pi: ExtensionAPI) {
   pi.on("input", (event, ctx) => {
     if (event.source === "extension" || process.env.MEMU_BRIDGING_RUN?.trim() || !event.text.trim()) return;
     pendingMemorize = true;
-    startHook("prompt-hook", { prompt: event.text, session_id: ctx.sessionManager.getSessionId(), source: event.source }, ctx);
+    startHook("prompt-hook", {
+      prompt: event.text,
+      session_id: ctx.sessionManager.getSessionId(),
+      source: event.source,
+      provider: ctx.model?.provider,
+      model: ctx.model?.id,
+    }, ctx);
     return { action: "continue" as const };
   });
   pi.on("agent_settled", (_event, ctx) => { memorizeIfSettled(ctx); });

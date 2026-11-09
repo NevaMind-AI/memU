@@ -12,15 +12,16 @@ from memu.hosts import query_extraction
 from memu.hosts.claude_code import prompt_hook
 from memu.hosts.claude_code import query_extraction as claude
 from memu.hosts.codex import query_extraction as codex
+from memu.hosts.pi import query_extraction as pi
 
 
-@pytest.mark.parametrize("adapter", [codex, claude])
+@pytest.mark.parametrize("adapter", [codex, claude, pi])
 @pytest.mark.parametrize("outcome", ["short", "success", "timeout", "failure", "input_limit"])
 def test_shared_selection(adapter, outcome, monkeypatch):
     prompt = "topic" if outcome == "short" else "x" * (32001 if outcome == "input_limit" else 2500)
     calls = []
 
-    def extract(value):
+    def extract(value, **kwargs):
         calls.append(value)
         if outcome == "timeout":
             raise subprocess.TimeoutExpired("agent", 12)

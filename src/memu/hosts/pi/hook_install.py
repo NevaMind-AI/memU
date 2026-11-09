@@ -76,7 +76,7 @@ async def _remove(args: argparse.Namespace) -> int:
     if getattr(args, "json", False):
         print(json.dumps({"status": "passed", "removed": removed, "notice": notice}))
     else:
-        print(f"Removed {removed} memU extension(s). {notice}")
+        print(f"🧹  Removed {removed} memU extension(s). {notice}")
     return 0
 
 

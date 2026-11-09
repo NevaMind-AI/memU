@@ -14,6 +14,7 @@ from typing import Any
 from uuid import uuid4
 
 from memu.env import LONG_QUERY_CHARS
+from memu.hosts.pi.query_extraction import select_query
 from memu.hosts.retrieval import QueryKind, render_context, retrieve
 
 
@@ -30,18 +31,29 @@ async def prompt_hook(args: argparse.Namespace) -> int:
         if event.get("source") == "extension" or not prompt.strip():
             trace["status"] = "input_skipped"
         else:
-            query = prompt[:2000]
-            kind: QueryKind = "long" if sum(not char.isspace() for char in prompt) >= LONG_QUERY_CHARS else "short"
+            for name in ("provider", "model"):
+                if event.get(name) is not None and not isinstance(event[name], str):
+                    raise TypeError(f"Expected {name} to be a string")  # noqa: TRY003, TRY301
+            query = await asyncio.to_thread(
+                select_query, prompt, trace, provider=event.get("provider"), model=event.get("model")
+            )
+            kind: QueryKind = (
+                "extracted"
+                if trace.get("query_source") == "extracted"
+                else "long"
+                if sum(not char.isspace() for char in prompt) >= LONG_QUERY_CHARS
+                else "short"
+            )
             trace.update(
                 query=query,
                 query_kind=kind,
-                query_source="prefix" if len(prompt) > 2000 else "original",
+                query_truncated=trace.get("query_source") == "prefix",
                 prompt_chars=len(prompt),
                 query_chars=len(query),
-                query_truncated=len(prompt) > 2000,
                 prompt_sha256=hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
             )
-            memories = await asyncio.wait_for(retrieve(query, query_kind=kind), timeout=40)
+            remaining = max(0.001, 40 - (time.monotonic() - started))
+            memories = await asyncio.wait_for(retrieve(query, query_kind=kind), timeout=remaining)
             context = render_context(memories)
             counts = {layer: len(memories.get(layer, [])) for layer in ("hits", "resources")}
             trace.update(

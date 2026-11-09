@@ -164,7 +164,9 @@ retrieval in the
 background; results enter the model context and resume an idle agent. After the
 user turn and pending retrieval settle, a background worker processes the saved
 conversation into memory using the active session's model. Workers share a lock
-and a 30-minute cooldown. The installer replaces memU's managed retrieval
+and a 30-minute cooldown. Long prompts use an isolated, tool-free pi request to
+extract a search query with the active provider/model; extraction has a 12-second
+timeout and falls back to the original prefix. The installer replaces memU's managed retrieval
 instruction and skill with the extension. Run `memu-pi uninstall` and
 reload to remove it.
 

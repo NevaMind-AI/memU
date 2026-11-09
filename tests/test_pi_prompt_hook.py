@@ -7,7 +7,7 @@ import json
 import pytest
 
 from memu.hosts import instruction
-from memu.hosts.pi import hook_install, prompt_hook
+from memu.hosts.pi import hook_install, prompt_hook, query_extraction
 
 
 def test_owned_extension_install_and_remove(tmp_path, monkeypatch):
@@ -41,6 +41,10 @@ async def test_prompt_hook_returns_context_and_log(tmp_path, monkeypatch, capsys
         calls.append((query, query_kind))
         return {"hits": [{"text": "An independently meaningful memory"}], "resources": []}
 
+    def failed_extraction(*args, **kwargs):
+        raise ValueError("invalid extraction")  # noqa: TRY003
+
+    monkeypatch.setattr(query_extraction, "_extract", failed_extraction)
     monkeypatch.setattr(prompt_hook, "retrieve", retrieve)
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"prompt": "a" * 2100, "session_id": "s"})))
     assert await prompt_hook.prompt_hook(argparse.Namespace(base_dir=str(tmp_path))) == 0
@@ -49,6 +53,7 @@ async def test_prompt_hook_returns_context_and_log(tmp_path, monkeypatch, capsys
     assert calls == [("a" * 2000, "long")]
     trace = json.loads(next((tmp_path / "log/hooks/retrieve").glob("*.json")).read_text(encoding="utf-8"))
     assert trace["query_truncated"] is True
+    assert trace["extraction_status"] == "failed"
     assert trace["session_id"] == "s"
     assert trace["returned_counts"] == {"hits": 1, "resources": 0}
 
