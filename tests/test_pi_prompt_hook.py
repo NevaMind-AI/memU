@@ -20,9 +20,11 @@ def test_owned_extension_install_and_remove(tmp_path, monkeypatch):
     rules.write_text("# My rules\n", encoding="utf-8")
     instruction.install(rules, "memu-pi", skill=True)
     instruction.install_skill(home / "skills", "memu-pi")
+    extra = home / "skills/memu-retrieve/notes.txt"
+    extra.write_text("user notes", encoding="utf-8")
+    before = {path: path.read_bytes() for path in (rules, instruction.skill_path(home / "skills"), extra)}
     target = hook_install.install(tmp_path / "data")
-    assert rules.read_text(encoding="utf-8") == "# My rules\n"
-    assert not instruction.skill_path(home / "skills").exists()
+    assert all(path.read_bytes() == content for path, content in before.items())
     original = target.read_text(encoding="utf-8")
     assert "__MEMU_" not in original
     assert "prompt-hook" in original

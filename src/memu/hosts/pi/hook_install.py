@@ -11,7 +11,6 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
-from memu.hosts import instruction
 from memu.hosts.hooks.admission import workspace_lock
 from memu.hosts.pi import memorize_hook
 from memu.hosts.pi.prompt_hook import prompt_hook
@@ -38,7 +37,6 @@ def extension_content(base: Path) -> str:
 
 
 def install(base: Path) -> Path:
-    home = agent_dir()
     destination = target()
     content = extension_content(base)
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -48,11 +46,6 @@ def install(base: Path) -> Path:
         Path(temporary.name).replace(destination)
     finally:
         Path(temporary.name).unlink(missing_ok=True)
-    for name in ("AGENTS.md", "AGENTS.override.md"):
-        instruction.remove(home / name, "memu-pi")
-    skill = instruction.skill_path(home / "skills")
-    if skill.is_file() and "memu-pi retrieve" in skill.read_text(encoding="utf-8"):
-        instruction.remove_skill(home / "skills")
     return destination
 
 

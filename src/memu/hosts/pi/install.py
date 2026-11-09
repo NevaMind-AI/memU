@@ -28,8 +28,6 @@ def _check_files() -> None:
         hook_install.target()
     except ValueError:
         raise lifecycle.Blocked("pi 扩展安装位置已有非 memU 文件或链接，请检查归属后重试。") from None
-    for name in ("AGENTS.md", "AGENTS.override.md"):
-        lifecycle.check_cleanup(hook_install.agent_dir(), "memu-pi", name)
 
 
 async def _stage(stage: int, args: argparse.Namespace) -> None:

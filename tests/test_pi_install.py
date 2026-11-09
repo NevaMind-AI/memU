@@ -41,13 +41,20 @@ def test_install_is_idempotent_and_preserves_pi_configuration(machine, capsys):
     auth = home / "auth.json"
     settings.write_text('{"defaultModel":"luna"}', encoding="utf-8")
     auth.write_text('{"private":"preserved"}', encoding="utf-8")
+    rules = home / "AGENTS.md"
+    rules.write_text("# User instructions\n", encoding="utf-8")
+    skill = home / "skills/memu-retrieve/SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text("User-edited skill mentioning memu-pi retrieve", encoding="utf-8")
+    notes = skill.parent / "notes.txt"
+    notes.write_text("user notes", encoding="utf-8")
     foreign = home / "extensions/other.ts"
     foreign.parent.mkdir()
     foreign.write_text("// another extension", encoding="utf-8")
     base.mkdir()
     cursor = base / "cursor.json"
     cursor.write_text("preserved", encoding="utf-8")
-    before = {p: p.read_bytes() for p in (settings, auth, foreign, cursor)}
+    before = {p: p.read_bytes() for p in (settings, auth, foreign, cursor, rules, skill, notes)}
     assert invoke(machine, "--json") == 0
     rows = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
     assert [row["stage"] for row in rows if row["status"] == "passed"] == [1, 2, 3]
@@ -63,7 +70,7 @@ def test_install_is_idempotent_and_preserves_pi_configuration(machine, capsys):
     assert calls == [["doctor", "--backend-only"], ["doctor", "--backend-only"]]
 
 
-@pytest.mark.parametrize("condition", ["missing-pi", "foreign-file", "edited-skill", "backend"])
+@pytest.mark.parametrize("condition", ["missing-pi", "foreign-file", "backend"])
 def test_install_stops_before_hook_mutation(machine, monkeypatch, capsys, condition):
     home, _, calls = machine
     target = home / "extensions/memu-retrieval.ts"
@@ -72,10 +79,6 @@ def test_install_stops_before_hook_mutation(machine, monkeypatch, capsys, condit
     elif condition == "foreign-file":
         target.parent.mkdir()
         target.write_text("// user file", encoding="utf-8")
-    elif condition == "edited-skill":
-        skill = home / "skills/memu-retrieve/SKILL.md"
-        skill.parent.mkdir(parents=True)
-        skill.write_text("user data", encoding="utf-8")
     else:
 
         async def failed(argv):
