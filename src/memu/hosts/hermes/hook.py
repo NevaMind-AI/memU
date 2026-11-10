@@ -19,7 +19,7 @@ from uuid import uuid4
 from memu.env import LONG_QUERY_CHARS
 from memu.hosts.bridging import Layout, self_sessions
 from memu.hosts.hermes.sessions import state_db_path
-from memu.hosts.hooks import admission, worker
+from memu.hosts.hooks import worker
 from memu.hosts.query_extraction import QUERY_MAX_CHARS
 from memu.hosts.retrieval import QueryKind, render_context, retrieve
 
@@ -111,23 +111,18 @@ def run_worker(args: argparse.Namespace) -> int:
         print(f"=== WORKER hermes pid={os.getpid()} ===", flush=True)
         code = 1
         try:
-            with admission.memorize_run(layout) as admitted:
-                code = (
-                    run(
-                        SPEC,
-                        [
-                            "hook-run",
-                            "--base-dir",
-                            str(layout.base),
-                            "--session-dir",
-                            str(state_db_path()),
-                            "--agent",
-                            args.agent,
-                        ],
-                    )
-                    if admitted
-                    else 0
-                )
+            code = run(
+                SPEC,
+                [
+                    "hook-run",
+                    "--base-dir",
+                    str(layout.base),
+                    "--session-dir",
+                    str(state_db_path()),
+                    "--agent",
+                    args.agent,
+                ],
+            )
         except Exception:
             traceback.print_exc()
         print(f"=== FINISHED hermes exit={code} ===", flush=True)

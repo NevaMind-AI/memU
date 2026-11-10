@@ -38,6 +38,21 @@ def machine(tmp_path, monkeypatch):
     return home, base, calls
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [0, 1])
+async def test_installer_backend_doctor_uses_real_command_dispatch(monkeypatch, status):
+    from memu.hosts import host_cli
+    from memu.hosts.hermes.cli import SPEC
+
+    async def backend(spec, args):
+        assert spec is SPEC
+        assert args.backend_only is True
+        return status
+
+    monkeypatch.setattr(host_cli, "_cmd_backend_doctor", backend)
+    assert await install._command(["doctor", "--backend-only"]) == status
+
+
 def test_install_and_uninstall_preserve_settings_and_memory(machine, capsys):
     home, base, calls = machine
     home.mkdir()
@@ -122,19 +137,39 @@ def test_install_and_remove_refuse_symlinks(machine, location):
     assert original.exists()
 
 
-def test_worker_uses_shared_cooldown_and_logs_admission(machine, monkeypatch):
+@pytest.mark.parametrize("entry", ["worker", "cli"])
+def test_memory_entry_points_share_lock_and_cooldown(machine, monkeypatch, capsys, entry):
     from memu.hosts import host_cli
 
     _, base, _ = machine
     base.mkdir()
     calls = []
-    monkeypatch.setattr(host_cli, "run", lambda spec, argv: calls.append(argv) or 0)
+
+    async def pipeline(spec, args):
+        calls.append(spec.host)
+        with workspace_lock(base) as acquired:
+            assert not acquired
+        return 0
+
+    monkeypatch.setattr(host_cli, "_run_hook_pipeline", pipeline)
     args = SimpleNamespace(base_dir=base, agent="hermes", log_path=base / "worker.log")
-    assert hook.run_worker(args) == 0
-    assert hook.run_worker(args) == 0
-    assert len(calls) == 1
-    assert calls[0][0] == "hook-run"
-    assert "status=cooldown" in args.log_path.read_text(encoding="utf-8")
+
+    def invoke():
+        if entry == "worker":
+            return hook.run_worker(args)
+        return main(["hook-run", "--base-dir", str(base)])
+
+    with workspace_lock(base) as acquired:
+        assert acquired
+        assert invoke() == 0
+        assert calls == []
+    assert invoke() == 0
+    assert invoke() == 0
+    assert calls == ["hermes"]
+    output = args.log_path.read_text(encoding="utf-8") if entry == "worker" else capsys.readouterr().out
+    assert "status=busy" in output
+    assert "status=cooldown" in output
+    assert "status=succeeded" in output
 
 
 def test_plugin_maps_multimodal_events_and_ignores_own_runs(machine, monkeypatch):

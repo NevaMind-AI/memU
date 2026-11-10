@@ -719,11 +719,13 @@ def _report_guide_opened(spec: HostSpec, event: str) -> None:
 
 
 async def _cmd_hook_run(spec: HostSpec, args: argparse.Namespace) -> int:
-    if spec.host in {"codex", "claude-code", "pi"}:
+    if spec.host in {"codex", "claude-code", "pi", "hermes"}:
         if spec.host == "codex":
             from memu.hosts.codex.notify_console import memorize_run
         elif spec.host == "pi":
             from memu.hosts.pi.memorize_hook import memorize_run
+        elif spec.host == "hermes":
+            from memu.hosts.hooks.admission import memorize_run
         else:
             from memu.hosts.claude_code.memorize_hook import memorize_run
 
@@ -957,7 +959,7 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
             else "Verify MEMU_* config resolves and the selected memory backend is reachable"
         ),
     )
-    if spec.host in {"codex", "claude-code", "pi"}:
+    if spec.host in {"codex", "claude-code", "pi", "hermes"}:
         p.add_argument(
             "--backend-only", action="store_true", help="Check only the memory backend (installer preflight)"
         )
