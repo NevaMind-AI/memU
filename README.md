@@ -95,8 +95,6 @@ Once the scheduled bridging task is installed, memU can turn useful agent histor
 
 The judgment and synthesis stay inside the agent. `MemoryService` makes no LLM or chat calls; it stores, embeds, and retrieves the skill Markdown the agent prepared.
 
-Every memory/skill mirror needs a non-empty `name:` in its frontmatter. A missing or blank name stops the commit with a `ValueError` identifying the file, leaving its snapshot and pending work intact; add the intended name and retry. Direct `commit_results` calls also reject missing or blank names before embedding or storage writes, rather than silently skipping those records.
-
 ## Self-hosted
 
 **Private · Single-device · Embedding key required**
