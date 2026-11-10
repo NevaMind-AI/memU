@@ -86,4 +86,7 @@ def read_recall_file(path: Path, track: str) -> dict[str, Any]:
                 name = value.strip()
             elif key.strip() == "description":
                 description = value.strip()
+    if not name:
+        msg = f"recall file {path.name!r} requires a non-empty name in frontmatter"
+        raise ValueError(msg)
     return {"name": name, "track": track, "description": description, "content": content}
