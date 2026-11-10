@@ -17,6 +17,10 @@ logger = logging.getLogger("memu.hermes")
 def _call(action: str, event: dict[str, Any]) -> dict[str, Any]:
     from hermes_constants import get_hermes_home  # type: ignore[import-not-found]
 
+    env = dict(os.environ, HERMES_HOME=str(get_hermes_home()), PYTHONIOENCODING="utf-8")
+    # Hermes can export its own site-packages for a different Python version.
+    for key in ("PYTHONPATH", "PYTHONHOME"):
+        env.pop(key, None)
     result = subprocess.run(  # noqa: S603
         [PYTHON, "-m", "memu.hosts.hermes.hook", action, "--base-dir", BASE],
         input=json.dumps(event, ensure_ascii=False),
@@ -24,12 +28,13 @@ def _call(action: str, event: dict[str, Any]) -> dict[str, Any]:
         encoding="utf-8",
         capture_output=True,
         timeout=25,
-        env=dict(os.environ, HERMES_HOME=str(get_hermes_home()), PYTHONIOENCODING="utf-8"),
+        env=env,
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         check=False,
     )
     if result.returncode:
-        raise RuntimeError("memU hook failed; check the host hook logs")  # noqa: TRY003
+        detail = result.stderr.strip()[-4000:] or "No stderr output"
+        raise RuntimeError(f"memU {action} exited {result.returncode}:\n{detail}")  # noqa: TRY003
     output = json.loads(result.stdout)
     if not isinstance(output, dict):
         raise TypeError("Expected a memU hook response object")  # noqa: TRY003

@@ -25,6 +25,9 @@ through `on_session_end`. The worker uses the existing Hermes model/provider
 configuration. The installer does not verify model access with a paid request.
 Retrieval waits up to 20 seconds and uses at most the first 2,000 characters of
 the user text. Hook diagnostics live under `~/.memu/hosts/hermes/log/hooks/`.
+The plugin runs memU with its installing Python runtime and clears inherited
+`PYTHONPATH`/`PYTHONHOME` overrides. Subprocess startup errors, including the exit
+code and bounded stderr, are recorded in Hermes's agent/error logs.
 
 Existing SOUL.md instructions, skills, sessions, and memory are preserved.
 Before relying on hooks, preview and remove the previous memU retrieval

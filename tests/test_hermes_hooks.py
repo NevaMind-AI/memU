@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -189,12 +190,61 @@ def test_memory_entry_points_share_lock_and_cooldown(machine, monkeypatch, capsy
     assert "status=succeeded" in output
 
 
-def test_plugin_maps_multimodal_events_and_ignores_own_runs(machine, monkeypatch):
-    _, base, _ = machine
+@pytest.fixture
+def plugin(machine, monkeypatch):
+    home, base, _ = machine
     path = hook_install.install(base) / "__init__.py"
     spec = importlib.util.spec_from_file_location("test_memu_hermes_plugin", path)
-    plugin = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(plugin)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setitem(sys.modules, "hermes_constants", SimpleNamespace(get_hermes_home=lambda: home))
+    return module
+
+
+@pytest.mark.parametrize("action", ["retrieve", "remember-self", "memorize"])
+def test_plugin_isolates_its_python_for_all_actions(plugin, tmp_path, monkeypatch, action):
+    poison = tmp_path / "foreign-python"
+    poison.mkdir()
+    (poison / "memu.py").write_text("raise RuntimeError('foreign Python dependency loaded')", encoding="utf-8")
+    monkeypatch.setenv("PYTHONPATH", str(poison))
+    monkeypatch.setenv("PYTHONHOME", str(poison))
+    monkeypatch.setenv("MEMU_BRIDGING_RUN", "test-worker")
+    run = plugin.subprocess.run
+
+    def isolated_run(argv, **kwargs):
+        assert "PYTHONPATH" not in kwargs["env"]
+        assert "PYTHONHOME" not in kwargs["env"]
+        assert kwargs["env"]["HERMES_HOME"] == str(hook_install.home())
+        assert kwargs["env"]["MEMU_BRIDGING_RUN"] == "test-worker"
+        if action == "memorize":
+            # Exercise real command dispatch without launching a memory worker.
+            bootstrap = (
+                "from pathlib import Path; from memu.hosts.hermes import hook; "
+                "hook.launch_background=lambda base: Path('not-started'); raise SystemExit(hook.main())"
+            )
+            argv = [argv[0], "-c", bootstrap, *argv[3:]]
+        return run(argv, **kwargs)
+
+    monkeypatch.setattr(plugin.subprocess, "run", isolated_run)
+    result = plugin._call(action, {"prompt": "", "session_id": "test-worker"})
+    expected = {"retrieve": {"context": None}, "remember-self": {}, "memorize": {"log_path": "not-started"}}
+    assert result == expected[action]
+    assert plugin.os.environ["PYTHONPATH"] == str(poison)
+    assert plugin.os.environ["PYTHONHOME"] == str(poison)
+
+
+def test_plugin_reports_subprocess_failure_in_hermes_logs(plugin, monkeypatch, caplog):
+    monkeypatch.setattr(
+        plugin.subprocess,
+        "run",
+        lambda *a, **k: SimpleNamespace(returncode=1, stdout="", stderr="ModuleNotFoundError: startup dependency"),
+    )
+    assert plugin._retrieve(user_message="hello", session_id="s") is None
+    assert "memU retrieve exited 1" in caplog.text
+    assert "ModuleNotFoundError: startup dependency" in caplog.text
+
+
+def test_plugin_maps_multimodal_events_and_ignores_own_runs(plugin, monkeypatch):
     callbacks = {}
     plugin.register(SimpleNamespace(register_hook=lambda name, callback: callbacks.update({name: callback})))
     calls = []
