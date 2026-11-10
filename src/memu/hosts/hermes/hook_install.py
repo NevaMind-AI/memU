@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -17,14 +18,18 @@ from memu.hosts.hermes.sessions import hermes_home
 from memu.hosts.hooks.admission import workspace_lock
 
 NAME = "memu-memory"
+MIN_VERSION = (0, 23, 1)
+INJECTION_KEY = f"plugins.entries.{NAME}.allow_gateway_injection"
 MARKER = "# memU managed Hermes plugin."
 MANIFEST = f"""{MARKER}
 name: {NAME}
-version: "0.1.0"
-description: memU retrieval and background memory
+version: "0.2.0"
+requires_hermes: ">=0.23.1"
+description: memU asynchronous retrieval and background memory
 provides_hooks:
   - pre_llm_call
   - on_session_end
+  - on_session_finalize
 """
 
 
@@ -56,12 +61,12 @@ def plugin_content(base: Path) -> str:
     )
 
 
-def command(action: str) -> None:
+def command(*argv: str) -> str:
     executable = shutil.which("hermes")
     if not executable:
         raise FileNotFoundError("hermes is not on PATH")  # noqa: TRY003
     result = subprocess.run(  # noqa: S603
-        [executable, "plugins", action, NAME],
+        [executable, *argv],
         stdin=subprocess.DEVNULL,
         capture_output=True,
         text=True,
@@ -74,7 +79,18 @@ def command(action: str) -> None:
     )
     if result.returncode:
         print(result.stderr, file=sys.stderr)
-        raise RuntimeError(f"Hermes plugin {action} failed")  # noqa: TRY003
+        raise RuntimeError(f"Hermes command {argv[0]} failed")  # noqa: TRY003
+    return result.stdout
+
+
+def check_version() -> str:
+    output = command("--version")
+    match = re.search(r"(?m)^Hermes Agent v(\d+)\.(\d+)\.(\d+)(-[\w.-]+)?", output)
+    if match:
+        version = tuple(int(match[index]) for index in (1, 2, 3))
+        if MIN_VERSION <= version < (2000, 0, 0) and not (version == MIN_VERSION and match[4]):
+            return ".".join(match[index] for index in (1, 2, 3))
+    raise ValueError("Hermes >= 0.23.1 is required for asynchronous context injection; update Hermes and retry")  # noqa: TRY003
 
 
 def install(base: Path) -> Path:
@@ -82,7 +98,10 @@ def install(base: Path) -> Path:
     destination.mkdir(parents=True, exist_ok=True)
     _atomic_write_text(destination / "__init__.py", plugin_content(base))
     _atomic_write_text(destination / "plugin.yaml", MANIFEST)
-    command("enable")
+    command("config", "set", INJECTION_KEY, "true")
+    if json.loads(command("config", "get", INJECTION_KEY, "--json")) is not True:
+        raise RuntimeError("Hermes did not confirm the memU context injection grant")  # noqa: TRY003
+    command("plugins", "enable", NAME)
     return destination
 
 
@@ -112,7 +131,7 @@ async def remove(args: argparse.Namespace) -> int:
                 )
             ):
                 raise ValueError("Hermes memU plugin cache contains unowned files")  # noqa: TRY003
-            command("remove")
+            command("plugins", "remove", NAME)
             if destination.exists():
                 raise RuntimeError("Hermes plugin removal did not remove the managed directory")  # noqa: TRY003
     notice = "Restart Hermes to unload the memU plugin. An active memory worker may finish its current pass."

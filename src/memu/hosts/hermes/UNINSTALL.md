@@ -1,6 +1,6 @@
 # Uninstall memU for Hermes Agent
 
-<!-- memu-hermes-install: plugin-v1 -->
+<!-- memu-hermes-install: plugin-v2 -->
 <!-- {{task_name}} | {{former_task_names}} | {{all_task_names}} -->
 
 ```sh

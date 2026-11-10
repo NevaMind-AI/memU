@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from memu.hosts.base import RecordKind, TranscriptSource
+from memu.hosts.hermes.plugin import DELIVERY_PATTERN
 
 STATE_DB = "~/.hermes/state.db"
 
@@ -141,11 +142,23 @@ class HermesTranscriptSource(TranscriptSource):
         if role == "tool":
             return RecordKind.TOOL
         if role in _MESSAGE_ROLES:
-            if row.get("content"):
+            content = row.get("content")
+            if role == "user" and isinstance(content, str):
+                content = DELIVERY_PATTERN.sub("", content).strip()
+            if content:
                 return RecordKind.MESSAGE
             if row.get("tool_calls"):
                 return RecordKind.TOOL
         return RecordKind.OTHER
+
+    def sanitize(self, path: Path, record: str) -> str:
+        """Keep merged user input while excluding generated retrieval context."""
+        row = json.loads(record)
+        content = row.get("content")
+        if row.get("role") == "user" and isinstance(content, str) and DELIVERY_PATTERN.search(content):
+            row["content"] = DELIVERY_PATTERN.sub("", content).strip()
+            return json.dumps(row, ensure_ascii=False)
+        return record
 
     def timestamp(self, record: str) -> str | None:
         """Hermes stamps rows with epoch seconds; the cursor file wants a string."""

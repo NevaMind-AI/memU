@@ -1,7 +1,11 @@
 # Install memU for Hermes Agent
 
-<!-- memu-hermes-install: plugin-v1 -->
+<!-- memu-hermes-install: plugin-v2 -->
 <!-- {{task_name}} | {{former_task_names}} | {{all_task_names}} -->
+
+Requires **Hermes v0.23.1 or newer**. This stable release includes the session
+routing and queued message injection APIs used by memU across CLI, Desktop/TUI
+and gateway sessions. The installer checks the CLI version before changing hooks.
 
 Install Hermes first, then configure memU using the existing shared backend:
 
@@ -14,17 +18,29 @@ For a new backend, pass `--backend cloud --cloud-api-key <key>` or
 `memu-hermes install --help`.
 
 The installer checks Hermes availability and backend connectivity, writes the
-managed `memu-memory` plugin, enables it through `hermes plugins enable`, and
-verifies its local files. Use the same `HERMES_HOME` as the Hermes profile you
+managed `memu-memory` plugin, grants its follow-up context injection permission
+through `hermes config set plugins.entries.memu-memory.allow_gateway_injection true`,
+reads the grant back, and enables the plugin through `hermes plugins enable`.
+It verifies the installed files locally. Other plugin entries remain intact.
+Use the same `HERMES_HOME` as the Hermes profile you
 want to configure. On native Windows the default is `%LOCALAPPDATA%\hermes`;
 on Linux/macOS it is `~/.hermes`.
 
-Restart Hermes to load the plugin. Each user turn retrieves context through
-`pre_llm_call`; successful turn completion starts detached memory processing
-through `on_session_end`. The worker uses the existing Hermes model/provider
-configuration. The installer does not verify model access with a paid request.
-Retrieval waits up to 20 seconds and uses at most the first 2,000 characters of
-the user text. Hook diagnostics live under `~/.memu/hosts/hermes/log/hooks/`.
+Restart Hermes to load the plugin. `pre_llm_call` starts background retrieval
+and immediately returns, allowing the model to answer. Results are queued into
+the originating session through `ctx.inject_message(session_key=...)`: an idle
+session starts a follow-up turn; a busy session finishes its current turn first.
+The first answer may precede memory context. The plugin recognizes its own
+one-use delivery marker, and waits for the retrieval continuation to complete
+before starting detached memory processing. A queued result can add a model
+turn. New input supersedes pending retrieval results; finalizing a session
+invalidates its pending deliveries. When queued input is merged with a result,
+its user-authored text is kept. Prepared memory transcripts omit the marked
+retrieval context so it is not mined again as new user information.
+The worker uses the existing Hermes model/provider configuration. The installer
+does not verify model access with a paid request. Background retrieval is bounded
+to 20 seconds and uses at most the first 2,000 characters of the user text.
+Hook diagnostics live under `~/.memu/hosts/hermes/log/hooks/`.
 The plugin runs memU with its installing Python runtime and clears inherited
 `PYTHONPATH`/`PYTHONHOME` overrides. Subprocess startup errors, including the exit
 code and bounded stderr, are recorded in Hermes's agent/error logs.

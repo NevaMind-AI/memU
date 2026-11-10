@@ -27,10 +27,11 @@ async def _stage(stage: int, args: argparse.Namespace) -> None:
         if not executable:
             raise lifecycle.Blocked("Hermes was not found on PATH; open a terminal where hermes is available.")  # noqa: TRY003
         try:
+            version = hook_install.check_version()
             hook_install.target()
-        except ValueError as exc:
+        except (ValueError, RuntimeError) as exc:
             raise lifecycle.Blocked(str(exc)) from exc
-        print(f"   Hermes: {executable}")
+        print(f"   Hermes {version}: {executable}")
     elif stage == 2:
         await lifecycle.backend(args, _command)
     else:
@@ -55,7 +56,7 @@ async def run(args: argparse.Namespace) -> int:
         welcome="\nWelcome to memU · Hermes",
         completion={
             "notice": "Restart Hermes to load memory hooks. Remove any previously configured memU schedules separately.",
-            "hook_verification": "local_plugin_readback",
+            "hook_verification": "local_plugin_and_injection_grant_readback",
         },
     )
 

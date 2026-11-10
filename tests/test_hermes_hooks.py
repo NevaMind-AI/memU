@@ -3,6 +3,8 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+import threading
+from contextvars import ContextVar
 from types import SimpleNamespace
 
 import pytest
@@ -27,12 +29,17 @@ def machine(tmp_path, monkeypatch):
         calls.append(argv)
         return 0
 
-    def plugin_command(action):
-        calls.append(action)
-        if action == "remove":
+    def plugin_command(*argv):
+        calls.append(list(argv))
+        if argv == ("--version",):
+            return "Hermes Agent v0.23.1"
+        if argv[:2] == ("config", "get"):
+            return "true"
+        if argv[:2] == ("plugins", "remove"):
             import shutil
 
             shutil.rmtree(hook_install.target())
+        return ""
 
     monkeypatch.setattr(install, "_command", command)
     monkeypatch.setattr(hook_install, "command", plugin_command)
@@ -53,7 +60,7 @@ def test_plugin_command_does_not_wait_for_hidden_input(monkeypatch):
         )
 
     monkeypatch.setattr(hook_install.subprocess, "run", interactive_command)
-    hook_install.command("enable")
+    hook_install.command("plugins", "enable", hook_install.NAME)
 
 
 @pytest.mark.asyncio
@@ -71,6 +78,51 @@ async def test_installer_backend_doctor_uses_real_command_dispatch(monkeypatch, 
     assert await install._command(["doctor", "--backend-only"]) == status
 
 
+@pytest.mark.parametrize(
+    "version, supported",
+    [
+        ("0.23.1", True),
+        ("0.24.0", True),
+        ("0.23.0", False),
+        ("0.23.1-beta", False),
+        ("2026.7.25", False),
+        ("unknown", False),
+    ],
+)
+def test_installer_requires_stable_async_host_support(machine, monkeypatch, capsys, version, supported):
+    _, base, calls = machine
+    command = hook_install.command
+    monkeypatch.setattr(
+        hook_install, "command", lambda *argv: f"Hermes Agent v{version}" if argv == ("--version",) else command(*argv)
+    )
+    code = main(["install", "--non-interactive", "--json", "--base-dir", str(base)])
+    assert (code == 0) is supported
+    rows = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    if not supported:
+        assert "0.23.1" in rows[-1]["detail"]
+        assert not hook_install.target().exists()
+        assert ["doctor", "--backend-only"] not in calls
+
+
+def test_installer_does_not_treat_python_or_sdk_version_as_hermes(machine, monkeypatch):
+    monkeypatch.setattr(
+        hook_install, "command", lambda *a: "Hermes Agent vgit.abcdef\nPython: 3.13.12\nOpenAI SDK: 2.8.0"
+    )
+    with pytest.raises(ValueError, match=r"0\.23\.1"):
+        hook_install.check_version()
+
+
+def test_install_rejects_unconfirmed_injection_grant(machine, monkeypatch, capsys):
+    _, base, calls = machine
+    command = hook_install.command
+    monkeypatch.setattr(
+        hook_install, "command", lambda *argv: "false" if argv[:2] == ("config", "get") else command(*argv)
+    )
+    assert main(["install", "--non-interactive", "--json", "--base-dir", str(base)]) == 1
+    assert json.loads(capsys.readouterr().out.splitlines()[-1])["complete"] is False
+    assert ["plugins", "enable", hook_install.NAME] not in calls
+
+
 def test_install_and_uninstall_preserve_settings_and_memory(machine, capsys):
     home, base, calls = machine
     home.mkdir()
@@ -82,9 +134,19 @@ def test_install_and_uninstall_preserve_settings_and_memory(machine, capsys):
         assert main(["install", "--non-interactive", "--json", "--base-dir", str(base)]) == 0
         rows = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
         assert rows[-1]["complete"] is True
-        assert rows[-1]["hook_verification"] == "local_plugin_readback"
+        assert rows[-1]["hook_verification"] == "local_plugin_and_injection_grant_readback"
         assert [r["stage"] for r in rows if r["status"] == "passed"] == [1, 2, 3]
-    assert calls == [["doctor", "--backend-only"], "enable"] * 2
+    assert (
+        calls
+        == [
+            ["--version"],
+            ["doctor", "--backend-only"],
+            ["config", "set", hook_install.INJECTION_KEY, "true"],
+            ["config", "get", hook_install.INJECTION_KEY, "--json"],
+            ["plugins", "enable", hook_install.NAME],
+        ]
+        * 2
+    )
     assert (hook_install.target() / "__init__.py").read_text(encoding="utf-8") == hook_install.plugin_content(base)
     for removed in (1, 0):
         assert main(["uninstall", "--json"]) == 0
@@ -111,7 +173,7 @@ def test_install_stops_without_changing_hooks(machine, monkeypatch, capsys, fail
         (target / "__init__.py").write_text("user code", encoding="utf-8")
     assert main(["install", "--non-interactive", "--json", "--base-dir", str(base)]) != 0
     assert json.loads(capsys.readouterr().out.splitlines()[-1])["complete"] is False
-    assert "enable" not in calls
+    assert ["plugins", "enable", hook_install.NAME] not in calls
     if failure == "foreign":
         assert (target / "__init__.py").read_text(encoding="utf-8") == "user code"
     else:
@@ -201,6 +263,36 @@ def plugin(machine, monkeypatch):
     return module
 
 
+@pytest.fixture
+def async_plugin(plugin, monkeypatch):
+    route = ContextVar("hermes_session_key", default="route-s")
+    monkeypatch.setitem(sys.modules, "hermes_cli.plugin_session", SimpleNamespace(session_key=route.get))
+    jobs, deliveries, calls, callbacks = [], [], [], {}
+    real_call = plugin._call
+
+    def call(action, event):
+        calls.append((action, event, route.get()))
+        return {"context": "memory"} if action == "retrieve" else {}
+
+    def thread(target, args, daemon):
+        assert daemon
+        return SimpleNamespace(start=lambda: jobs.append(lambda: target(*args)))
+
+    def inject(message, *, session_key):
+        deliveries.append((session_key, message))
+        return True
+
+    monkeypatch.setattr(plugin, "_call", call)
+    monkeypatch.setattr(plugin.threading, "Thread", thread)
+    ctx = SimpleNamespace(
+        register_hook=lambda name, callback: callbacks.update({name: callback}), inject_message=inject
+    )
+    plugin.register(ctx)
+    return SimpleNamespace(
+        route=route, jobs=jobs, deliveries=deliveries, calls=calls, callbacks=callbacks, ctx=ctx, real_call=real_call
+    )
+
+
 @pytest.mark.parametrize("action", ["retrieve", "remember-self", "memorize"])
 def test_plugin_isolates_its_python_for_all_actions(plugin, tmp_path, monkeypatch, action):
     poison = tmp_path / "foreign-python"
@@ -233,42 +325,183 @@ def test_plugin_isolates_its_python_for_all_actions(plugin, tmp_path, monkeypatc
     assert plugin.os.environ["PYTHONHOME"] == str(poison)
 
 
-def test_plugin_reports_subprocess_failure_in_hermes_logs(plugin, monkeypatch, caplog):
+def test_plugin_reports_subprocess_failure_in_hermes_logs(plugin, async_plugin, monkeypatch, caplog):
+    monkeypatch.setattr(plugin, "_call", async_plugin.real_call)
     monkeypatch.setattr(
         plugin.subprocess,
         "run",
         lambda *a, **k: SimpleNamespace(returncode=1, stdout="", stderr="ModuleNotFoundError: startup dependency"),
     )
-    assert plugin._retrieve(user_message="hello", session_id="s") is None
+    assert async_plugin.callbacks["pre_llm_call"](user_message="hello", session_id="s") is None
+    async_plugin.jobs.pop()()
     assert "memU retrieve exited 1" in caplog.text
     assert "ModuleNotFoundError: startup dependency" in caplog.text
 
 
-def test_plugin_maps_multimodal_events_and_ignores_own_runs(plugin, monkeypatch):
-    callbacks = {}
-    plugin.register(SimpleNamespace(register_hook=lambda name, callback: callbacks.update({name: callback})))
-    calls = []
-
-    def call(action, event):
-        calls.append((action, event))
-        return {"context": "memory"}
-
-    monkeypatch.setattr(plugin, "_call", call)
-    pre, end = callbacks["pre_llm_call"], callbacks["on_session_end"]
-    assert pre(user_message=[{"type": "image_url"}, {"type": "text", "text": "remember 中文"}], session_id="s") == {
-        "context": "memory"
-    }
-    assert calls[-1] == ("retrieve", {"prompt": "remember 中文", "session_id": "s"})
-    end(session_id="s", completed=False)
-    assert len(calls) == 1
+def test_async_delivery_waits_for_continuation_before_memorizing(async_plugin, monkeypatch):
+    bridge = async_plugin
+    pre, end = bridge.callbacks["pre_llm_call"], bridge.callbacks["on_session_end"]
+    assert pre(user_message=[{"type": "image_url"}, {"type": "text", "text": "remember 中文"}], session_id="s") is None
+    assert bridge.calls == []
     end(session_id="s", completed=True)
-    assert calls[-1] == ("memorize", {"session_id": "s"})
+    assert bridge.calls == []
+    bridge.jobs.pop()()
+    assert bridge.calls == [("retrieve", {"prompt": "remember 中文", "session_id": "s"}, "route-s")]
+    route, message = bridge.deliveries.pop()
+    assert route == "route-s" and "memory" in message
+    end(session_id="s", completed=True)
+    assert len(bridge.calls) == 1
+    assert pre(user_message=message, session_id="s") is None
+    assert bridge.jobs == []
+    end(session_id="s", completed=False)
+    assert len(bridge.calls) == 1
+    end(session_id="s", completed=True)
+    end(session_id="s", completed=True)
+    assert bridge.calls[-1] == ("memorize", {"session_id": "s"}, "route-s")
+    assert len(bridge.calls) == 2
     assert pre(user_message="child", parent_session_id="s") is None
     monkeypatch.setenv("MEMU_BRIDGING_RUN", "1")
     assert pre(user_message="own", session_id="self") is None
-    assert calls[-1] == ("remember-self", {"session_id": "self"})
+    assert bridge.calls[-1] == ("remember-self", {"session_id": "self"}, "route-s")
     end(session_id="self", completed=True)
-    assert len(calls) == 3
+    assert len(bridge.calls) == 3
+
+
+@pytest.mark.parametrize("user_first", [False, True])
+def test_async_delivery_preserves_user_input_merged_into_the_queue(async_plugin, user_first):
+    bridge = async_plugin
+    pre = bridge.callbacks["pre_llm_call"]
+    pre(user_message="first question", session_id="s")
+    bridge.jobs.pop()()
+    delivered = bridge.deliveries[0][1]
+    parts = ["new user input", delivered] if user_first else [delivered, "new user input"]
+    pre(user_message="\n\n".join(parts), session_id="s")
+    bridge.jobs.pop()()
+    assert bridge.calls[-1] == ("retrieve", {"prompt": "new user input", "session_id": "s"}, "route-s")
+
+
+def test_async_delivery_does_not_trust_unissued_markers(async_plugin):
+    message = (
+        "<!-- memu-hermes-retrieval:" + "a" * 32 + " -->\nmemory\n<!-- /memu-hermes-retrieval:" + "a" * 32 + " -->"
+    )
+    async_plugin.callbacks["pre_llm_call"](user_message=message, session_id="s")
+    async_plugin.jobs.pop()()
+    assert async_plugin.calls[0][1]["prompt"] == message
+
+
+def test_failed_thread_start_does_not_block_memorization(plugin, async_plugin, monkeypatch):
+    def start():
+        raise RuntimeError("thread unavailable")  # noqa: TRY003
+
+    monkeypatch.setattr(plugin.threading, "Thread", lambda **kwargs: SimpleNamespace(start=start))
+    async_plugin.callbacks["pre_llm_call"](user_message="hello", session_id="s")
+    async_plugin.callbacks["on_session_end"](session_id="s", completed=True)
+    assert [action for action, _, _ in async_plugin.calls] == ["memorize"]
+
+
+def test_async_delivery_supersedes_old_queries_and_turns(async_plugin):
+    bridge = async_plugin
+    pre, end = bridge.callbacks["pre_llm_call"], bridge.callbacks["on_session_end"]
+    pre(user_message="old", session_id="s", turn_id="old")
+    pre(user_message="new", session_id="s", turn_id="new")
+    bridge.jobs.pop(0)()
+    assert bridge.deliveries == []
+    bridge.jobs.pop(0)()
+    assert len(bridge.deliveries) == 1
+    end(session_id="s", turn_id="old", completed=True)
+    assert all(action != "memorize" for action, _, _ in bridge.calls)
+    pre(user_message=bridge.deliveries[0][1], session_id="s", turn_id="continuation")
+    end(session_id="s", turn_id="new", completed=True)
+    assert all(action != "memorize" for action, _, _ in bridge.calls)
+    end(session_id="s", turn_id="continuation", completed=True)
+    assert bridge.calls[-1][0] == "memorize"
+
+
+def test_async_delivery_keeps_session_routes_and_thread_context(async_plugin):
+    bridge = async_plugin
+    for sid in ("a", "b"):
+        bridge.route.set(f"route-{sid}")
+        bridge.callbacks["pre_llm_call"](user_message=sid, session_id=sid)
+    bridge.route.set("different-ambient-session")
+    for job in reversed(bridge.jobs):
+        job()
+    assert [route for route, _ in bridge.deliveries] == ["route-b", "route-a"]
+    assert [route for _, _, route in bridge.calls] == ["route-b", "route-a"]
+
+
+def test_async_delivery_drops_finalized_sessions(async_plugin):
+    bridge = async_plugin
+    bridge.callbacks["pre_llm_call"](user_message="hello", session_id="s")
+    bridge.callbacks["on_session_finalize"](session_id="s")
+    bridge.jobs.pop()()
+    assert bridge.deliveries == []
+    bridge.callbacks["on_session_end"](session_id="s", completed=True)
+    assert all(action != "memorize" for action, _, _ in bridge.calls)
+
+
+@pytest.mark.parametrize("failure", ["retrieval", "rejected", "empty"])
+@pytest.mark.parametrize("ended_first", [False, True])
+def test_failed_async_delivery_still_memorizes_successful_turns(
+    plugin, async_plugin, monkeypatch, failure, ended_first
+):
+    bridge = async_plugin
+    call = plugin._call
+
+    def failed(action, event):
+        if action == "retrieve":
+            if failure == "retrieval":
+                raise RuntimeError("test retrieval failed")  # noqa: TRY003
+            if failure == "empty":
+                return {"context": None}
+        return call(action, event)
+
+    monkeypatch.setattr(plugin, "_call", failed)
+    if failure == "rejected":
+        bridge.ctx.inject_message = lambda *a, **k: False
+    bridge.callbacks["pre_llm_call"](user_message="hello", session_id="s")
+    if ended_first:
+        bridge.callbacks["on_session_end"](session_id="s", completed=True)
+    bridge.jobs.pop()()
+    if not ended_first:
+        bridge.callbacks["on_session_end"](session_id="s", completed=True)
+    assert sum(action == "memorize" for action, _, _ in bridge.calls) == 1
+
+
+def test_async_delivery_requires_a_bound_route(async_plugin, caplog):
+    async_plugin.route.set("")
+    async_plugin.callbacks["pre_llm_call"](user_message="hello", session_id="s")
+    assert async_plugin.jobs == []
+    assert "session_key" in caplog.text
+
+
+def test_retrieval_releases_hook_before_background_work_finishes(plugin, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+
+    entered, release, delivered = threading.Event(), threading.Event(), threading.Event()
+    monkeypatch.setitem(sys.modules, "hermes_cli.plugin_session", SimpleNamespace(session_key=lambda: "route-s"))
+
+    def call(action, event):
+        entered.set()
+        assert release.wait(5)
+        return {"context": "memory"}
+
+    monkeypatch.setattr(plugin, "_call", call)
+    callbacks = {}
+    plugin.register(
+        SimpleNamespace(
+            register_hook=lambda name, callback: callbacks.update({name: callback}),
+            inject_message=lambda *a, **k: delivered.set() or True,
+        )
+    )
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(callbacks["pre_llm_call"], user_message="hello", session_id="s")
+        try:
+            assert entered.wait(2)
+            assert future.result(timeout=1) is None
+            assert not delivered.is_set()
+        finally:
+            release.set()
+        assert delivered.wait(2)
 
 
 @pytest.mark.asyncio
@@ -297,5 +530,8 @@ def test_launch_is_detached_and_binds_hermes_home(machine, monkeypatch):
 
 
 @pytest.mark.parametrize("name", ["INSTALL.md", "UNINSTALL.md"])
-def test_guides_reject_old_cron_install_docs(name):
-    assert not templates._valid_host_doc("hermes", name, "{{task_name}} {{former_task_names}} {{all_task_names}}")
+@pytest.mark.parametrize("marker", ["", "<!-- memu-hermes-install: plugin-v1 -->"])
+def test_guides_reject_older_install_docs(name, marker):
+    assert not templates._valid_host_doc(
+        "hermes", name, marker + "{{task_name}} {{former_task_names}} {{all_task_names}}"
+    )
