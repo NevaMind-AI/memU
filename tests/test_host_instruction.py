@@ -454,14 +454,14 @@ def test_remove_skill_takes_the_whole_directory(tmp_path: pathlib.Path) -> None:
     instruction.install_skill(skills, BINARY)
     assert (skills / instruction.SKILL_NAME / "SKILL.md").is_file()
 
-    changed, diff = instruction.remove_skill(skills)
+    changed, diff = instruction.remove_skill(skills, BINARY)
 
     assert changed and diff
     assert not (skills / instruction.SKILL_NAME).exists(), "the skill directory goes whole, as it arrived"
 
 
 def test_remove_skill_absent_is_a_noop(tmp_path: pathlib.Path) -> None:
-    assert instruction.remove_skill(tmp_path / "skills") == (False, "")
+    assert instruction.remove_skill(tmp_path / "skills", BINARY) == (False, "")
 
 
 def test_remove_skill_leaves_a_foreign_same_named_directory_alone(tmp_path: pathlib.Path) -> None:
@@ -470,9 +470,8 @@ def test_remove_skill_leaves_a_foreign_same_named_directory_alone(tmp_path: path
     foreign.mkdir(parents=True)
     (foreign / "notes.md").write_text("the user's own\n", encoding="utf-8")
 
-    changed, diff = instruction.remove_skill(tmp_path / "skills")
-
-    assert not changed and not diff
+    with pytest.raises(ValueError, match="preserved"):
+        instruction.remove_skill(tmp_path / "skills", BINARY)
     assert (foreign / "notes.md").is_file()
 
 
@@ -480,7 +479,7 @@ def test_remove_skill_dry_run_writes_nothing(tmp_path: pathlib.Path) -> None:
     skills = tmp_path / "skills"
     instruction.install_skill(skills, BINARY)
 
-    changed, diff = instruction.remove_skill(skills, dry_run=True)
+    changed, diff = instruction.remove_skill(skills, BINARY, dry_run=True)
 
     assert not changed
     assert diff, "a dry run still reports what it would do"

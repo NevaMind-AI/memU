@@ -113,9 +113,10 @@ If a required check fails, retain the executable and inspect the diagnostic.
 Check these independently of the current hook; they can remain after a partial
 upgrade. Inspect `~/.codex/AGENTS.md` for memU's marked block and
 `~/.codex/skills/memu-retrieve/SKILL.md` for the owned retrieval procedure.
-Confirm ownership before removal: the shared command treats an existing
-SKILL.md in that named directory as its marker. Preserve ambiguous or user-owned
-content and report it for review.
+The shared command requires the packaged skill content, with no extra files,
+subdirectories or links. Edited or server-refreshed skills and ambiguous paths
+are preserved for selective ownership review. A rejected skill check leaves
+the instruction file unchanged, including with `--dry-run`.
 
 Preview the existing cleanup command and review its diff:
 
