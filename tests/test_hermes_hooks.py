@@ -38,6 +38,23 @@ def machine(tmp_path, monkeypatch):
     return home, base, calls
 
 
+def test_plugin_command_does_not_wait_for_hidden_input(monkeypatch):
+    import sys
+
+    run = hook_install.subprocess.run
+    monkeypatch.setattr(hook_install.shutil, "which", lambda _: sys.executable)
+
+    def interactive_command(argv, **kwargs):
+        assert kwargs["stdin"] == hook_install.subprocess.DEVNULL
+        return run(
+            [sys.executable, "-c", "try:\n input('Grant tool override? [y/N] ')\nexcept EOFError:\n pass"],
+            **kwargs,
+        )
+
+    monkeypatch.setattr(hook_install.subprocess, "run", interactive_command)
+    hook_install.command("enable")
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("status", [0, 1])
 async def test_installer_backend_doctor_uses_real_command_dispatch(monkeypatch, status):

@@ -62,6 +62,7 @@ def command(action: str) -> None:
         raise FileNotFoundError("hermes is not on PATH")  # noqa: TRY003
     result = subprocess.run(  # noqa: S603
         [executable, "plugins", action, NAME],
+        stdin=subprocess.DEVNULL,
         capture_output=True,
         text=True,
         encoding="utf-8",
