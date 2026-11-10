@@ -169,6 +169,16 @@ extract a search query with the active provider/model; extraction has a 12-secon
 timeout and falls back to the original prefix. The installer registers and verifies
 the extension. Run `memu-pi uninstall` and reload to remove it.
 
+For Hermes, run `memu-hermes install` to configure the backend and enable the
+managed `memu-memory` plugin, then restart Hermes. The plugin retrieves context
+before each user turn and starts a detached memory worker after a successful
+turn. Workers share a lock and a 30-minute cooldown. Use the same `HERMES_HOME`
+for installation and Hermes; native Windows defaults to `%LOCALAPPDATA%\\hermes`.
+Run `memu-hermes uninstall` to remove the plugin while keeping sessions and memory.
+Model/provider access must already be configured in Hermes; installation verifies
+local plugin files and backend connectivity. See the [Hermes installation guide](src/memu/hosts/hermes/INSTALL.md)
+for query limits and existing-installation cleanup.
+
 Host retrieval returns compact JSON with at most five self-contained `hits` plus independent `resources`. Each hit combines matched `text` with its source's `description`, `track`, and local mirror `path` (or inline `content` when no mirror is available). Its `score` describes the matched segment; `created_at` and `updated_at` describe the source file when available. Hits retain segment order, including excerpts whose source is missing; sources without matched excerpts remain source-only hits. Resources contain `path`, `caption`, and available scores/timestamps. Database IDs and scope metadata are omitted from the agent-facing output.
 
 Install or invoke the CLI directly:
