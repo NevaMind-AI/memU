@@ -1,4 +1,4 @@
-"""Hermes Agent's session log: the SQLite store at ``~/.hermes/state.db``.
+"""Hermes Agent's session log: the SQLite store under the active Hermes home.
 
 The whole of what makes this host Hermes. Everything the bridging task does with
 these records is host-agnostic and lives in :mod:`memu.hosts.bridging`.
@@ -6,9 +6,10 @@ these records is host-agnostic and lives in :mod:`memu.hosts.bridging`.
 Hermes is the one supported host whose log is *only* ever SQLite, never
 JSONL-on-disk (OpenClaw reads both): sessions and
 their full message history live in two tables (``sessions``, ``messages``) of a
-WAL-mode SQLite database under the Hermes home (``~/.hermes`` by default; the
-host honors ``HERMES_HOME``, in which case pass ``--session-dir`` pointing at
-that ``state.db``). ``~/.hermes/sessions/saved/`` holds only manual snapshots and
+WAL-mode SQLite database under the Hermes home (``~/.hermes`` on POSIX,
+``%LOCALAPPDATA%\\hermes`` on Windows; ``HERMES_HOME`` overrides either default,
+in which case pass ``--session-dir`` pointing at that ``state.db``).
+``<Hermes home>/sessions/saved/`` holds only manual snapshots and
 is ignored. This is exactly the "different container" seam
 :class:`~memu.hosts.base.TranscriptSource` anticipates: :meth:`discover`,
 :meth:`read_records`, :meth:`key`, and :meth:`timestamp` are overridden; each
@@ -36,15 +37,25 @@ from memu.hosts.base import RecordKind, TranscriptSource
 STATE_DB = "~/.hermes/state.db"
 
 
-def state_db_path() -> Path:
-    """Resolve the active Hermes session store using Hermes's own precedence."""
+def hermes_home() -> Path:
+    """Resolve the Hermes home within memu-cli.
+
+    Ported from NousResearch/hermes-agent hermes_constants.py at upstream HEAD
+    760112adb6458417da8614d2269e5325f0739ed5 (2026-07-25 UTC).
+    Hermes passes its active profile to subprocesses through HERMES_HOME.
+    """
     if value := os.environ.get("HERMES_HOME", "").strip():
-        return Path(value) / "state.db"
+        return Path(value).expanduser()
     if sys.platform == "win32":
         local_appdata = os.environ.get("LOCALAPPDATA", "").strip()
         root = Path(local_appdata) if local_appdata else Path.home() / "AppData" / "Local"
-        return root / "hermes" / "state.db"
-    return Path.home() / ".hermes" / "state.db"
+        return root / "hermes"
+    return Path.home() / ".hermes"
+
+
+def state_db_path() -> Path:
+    """Resolve the active Hermes session store."""
+    return hermes_home() / "state.db"
 
 
 _MESSAGE_ROLES = ("user", "assistant")

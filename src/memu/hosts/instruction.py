@@ -185,7 +185,7 @@ def patch(current: str, binary: str, *, skill: bool = False, skill_text: str | N
 
 
 def strip(current: str, binary: str) -> str:
-    """Return ``current`` with the managed block removed — the inverse of :func:`patch`.
+    """Return ``current`` with all of this host's managed blocks removed.
 
     Pure, for the same reason :func:`patch` is. Only the marker-fenced block is
     memU's to take back; everything outside it is the user's and survives
@@ -196,7 +196,7 @@ def strip(current: str, binary: str) -> str:
     pattern = _block_re(binary)
     if not pattern.search(current):
         return current
-    stripped = pattern.sub("", current, count=1)
+    stripped = pattern.sub("", current)
     stripped = re.sub(r"\n{3,}", "\n\n", stripped)
     if not stripped.strip():
         return ""

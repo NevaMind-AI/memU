@@ -18,7 +18,7 @@ from uuid import uuid4
 
 from memu.env import LONG_QUERY_CHARS
 from memu.hosts.bridging import Layout, self_sessions
-from memu.hosts.hermes.sessions import state_db_path
+from memu.hosts.hermes.sessions import hermes_home, state_db_path
 from memu.hosts.hooks import worker
 from memu.hosts.query_extraction import QUERY_MAX_CHARS
 from memu.hosts.retrieval import QueryKind, render_context, retrieve
@@ -30,7 +30,7 @@ def stream_agent(argv: list[str], layout: Layout, prompt: str, timeout: int) -> 
         layout,
         "",
         timeout,
-        env=dict(os.environ, MEMU_BRIDGING_RUN="1", HERMES_HOME=str(state_db_path().parent)),
+        env=dict(os.environ, MEMU_BRIDGING_RUN="1", HERMES_HOME=str(hermes_home())),
         stdin=subprocess.DEVNULL,
     )
 
@@ -88,7 +88,7 @@ def launch_background(base: Path) -> Path:
             str(log),
         ],
         cwd=base,
-        env=dict(os.environ, HERMES_HOME=str(state_db_path().parent), PYTHONIOENCODING="utf-8"),
+        env=dict(os.environ, HERMES_HOME=str(hermes_home()), PYTHONIOENCODING="utf-8"),
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,

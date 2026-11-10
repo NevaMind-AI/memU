@@ -27,6 +27,16 @@ Retrieval waits up to 20 seconds and uses at most the first 2,000 characters of
 the user text. Hook diagnostics live under `~/.memu/hosts/hermes/log/hooks/`.
 
 Existing SOUL.md instructions, skills, sessions, and memory are preserved.
-Inspect and remove any previous memU retrieval instruction or scheduled
-bridging task separately before relying on the hooks, to avoid duplicate work.
+Before relying on hooks, preview and remove the previous memU retrieval
+instruction and legacy `memu-retrieve` skill:
+
+```sh
+memu-hermes remove-instruction --dry-run
+memu-hermes remove-instruction
+```
+
+These commands use the active Hermes home described above, remove all complete
+managed blocks belonging to `memu-hermes`, and preserve other SOUL.md content.
+Restart Hermes after cleanup. Inspect and remove previous scheduled bridging
+tasks separately to avoid duplicate processing.
 Stop on a nonzero installer exit and report its diagnostic.

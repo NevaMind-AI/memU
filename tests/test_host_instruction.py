@@ -14,6 +14,9 @@ from __future__ import annotations
 
 import argparse
 import pathlib
+import subprocess
+import sys
+import textwrap
 
 import pytest
 
@@ -529,3 +532,51 @@ def test_cli_remove_without_a_skills_dir_touches_no_skill(tmp_path: pathlib.Path
     remove = build_parser().parse_args(["remove-instruction", "--path", str(agents), "--skills-dir", ""])
     assert instruction._cmd_remove_instruction(remove) == 0
     assert instruction.begin(BINARY) not in agents.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("host", ["hermes", "pi", "codex", "claude_code"])
+def test_host_cli_removes_all_owned_blocks_and_legacy_skill(tmp_path, monkeypatch, host):
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "hermes"))
+    script = textwrap.dedent("""\
+        import importlib
+        import sys
+        from pathlib import Path
+        from unittest.mock import patch
+        from memu.hosts import instruction, templates
+        from memu.hosts.host_cli import build_parser
+
+        cli = importlib.import_module(f'memu.hosts.{sys.argv[1]}.cli')
+        spec = cli.SPEC
+        args = build_parser(spec).parse_args(['remove-instruction'])
+        path = Path(args.path).expanduser()
+        skills = Path(args.skills_dir).expanduser()
+        assert args.skills_dir
+        assert path.is_relative_to(Path(sys.argv[2]))
+        assert skills.is_relative_to(Path(sys.argv[2]))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('# User rules\\n', encoding='utf-8')
+        with patch.object(templates, 'fetch', return_value=None):
+            assert cli.main(['install-instruction']) == 0
+            assert cli.main(['install-instruction']) == 0
+        text = path.read_text(encoding='utf-8')
+        assert text.count(instruction.begin(spec.binary)) == 1
+        legacy = f'{instruction.begin(spec.binary)}\\nOld version body.\\n{instruction.END}\\n'
+        other = instruction.block('memu-other')
+        unowned = '<!-- memu:begin -->\\nKeep unknown markers.\\n<!-- memu:end -->\\n'
+        path.write_text(text + legacy + other + unowned, encoding='utf-8')
+        instruction.install_skill(skills, spec.binary)
+        before = path.read_bytes()
+        assert cli.main(['remove-instruction', '--dry-run']) == 0
+        assert path.read_bytes() == before
+        assert instruction.skill_path(skills).is_file()
+        assert cli.main(['remove-instruction']) == 0
+        result = path.read_text(encoding='utf-8')
+        assert instruction.begin(spec.binary) not in result
+        assert '# User rules' in result and other in result and unowned in result
+        assert not instruction.skill_path(skills).exists()
+        assert cli.main(['remove-instruction']) == 0
+        assert path.read_text(encoding='utf-8') == result
+        """)
+    subprocess.run([sys.executable, "-c", script, host, str(tmp_path)], check=True, timeout=30)  # noqa: S603

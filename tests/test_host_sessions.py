@@ -1459,6 +1459,19 @@ def test_hermes_native_windows_default_uses_local_appdata(
     assert state_db_path() == tmp_path / "hermes" / "state.db"
 
 
+@pytest.mark.parametrize("platform", ["win32", "linux"])
+def test_hermes_home_falls_back_to_platform_default(monkeypatch, tmp_path, platform):
+    from memu.hosts.hermes.sessions import hermes_home
+
+    monkeypatch.delenv("HERMES_HOME", raising=False)
+    monkeypatch.delenv("LOCALAPPDATA", raising=False)
+    monkeypatch.setattr("memu.hosts.hermes.sessions.sys.platform", platform)
+    monkeypatch.setattr(pathlib.Path, "home", lambda: tmp_path)
+    expected = tmp_path / "AppData/Local/hermes" if platform == "win32" else tmp_path / ".hermes"
+    assert hermes_home() == expected
+    assert state_db_path() == expected / "state.db"
+
+
 def test_hermes_discovers_sessions_most_recent_first(tmp_path: pathlib.Path) -> None:
     source = HermesTranscriptSource(_hermes_db(tmp_path))
     assert source.exists()

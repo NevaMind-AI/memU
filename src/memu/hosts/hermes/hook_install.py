@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from memu.hosts.bridging.recall_files import _atomic_write_text
-from memu.hosts.hermes.sessions import state_db_path
+from memu.hosts.hermes.sessions import hermes_home
 from memu.hosts.hooks.admission import workspace_lock
 
 NAME = "memu-memory"
@@ -29,7 +29,7 @@ provides_hooks:
 
 
 def home() -> Path:
-    return state_db_path().parent.expanduser().resolve()
+    return hermes_home().resolve()
 
 
 def target() -> Path:

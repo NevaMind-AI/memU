@@ -68,6 +68,14 @@ bound to the installing Python runtime and memU workspace. Ownership and symlink
 checks guard file updates and removal. Hermes's native plugin commands handle
 activation and removal bookkeeping. Restart Hermes to load or unload the plugin.
 
+memu-cli resolves Hermes paths locally from `HERMES_HOME`, then the platform
+default (`%LOCALAPPDATA%\hermes` on Windows, `~/.hermes` on POSIX). The rule is
+ported from upstream HEAD
+[`760112adb6458417da8614d2269e5325f0739ed5`](https://github.com/NousResearch/hermes-agent/blob/760112adb6458417da8614d2269e5325f0739ed5/hermes_constants.py)
+(2026-07-25 UTC). Instructions, legacy skill cleanup, plugins and the session
+store share that resolution. `remove-instruction` removes every complete
+managed block for the current host while preserving other hosts' blocks.
+
 ## Consequences
 
 Admission and pipeline behavior are shared across the four hosts. Native hook

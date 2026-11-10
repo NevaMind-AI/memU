@@ -24,13 +24,13 @@ from typing import Any
 
 from memu.hosts import hooks
 from memu.hosts.hermes import hook, hook_install, install
-from memu.hosts.hermes.sessions import HermesTranscriptSource, state_db_path
+from memu.hosts.hermes.sessions import HermesTranscriptSource, hermes_home, state_db_path
 from memu.hosts.host_cli import HostSpec, run
 
 HOST = "hermes"
 SESSION_ID_ENV = "HERMES_SESSION_ID"
 
-SOUL_MD = "~/.hermes/SOUL.md"
+SOUL_MD = str(hermes_home() / "SOUL.md")
 """Hermes's identity file — the one file loaded from ``HERMES_HOME`` into every
 session regardless of working directory, so the inject seam lands here.
 (Project-level ``.hermes.md``/``AGENTS.md`` files are per-directory and would
@@ -41,6 +41,9 @@ miss sessions started elsewhere.)"""
 
 
 def _register_extra(sub: Any) -> None:
+    # Legacy installs could include a retrieval skill even though new manual
+    # instructions stay inline in SOUL.md.
+    sub.choices["remove-instruction"].set_defaults(skills_dir=str(hermes_home() / "skills"))
     install.register(sub)
     hook_install.register(sub)
 
