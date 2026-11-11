@@ -116,6 +116,17 @@ Claude Code now uses automatic retrieval and background memorization hooks, but 
 - Read plist labels, program arguments, and launchd domains to establish whether a registration belongs to the Claude Code memU bridge.
 - Verify unloading and configuration removal in the correct domain on a real macOS environment. Report insufficient permissions accurately.
 
+### Current CLI Gaps to Verify
+
+`memu-claude-code schedule uninstall` currently delegates to the older shared
+Windows helper. A simulated removal error still returns success and deletes the
+local wrapper, prompt, and registration record. Inspection also treats failed
+queries as absent tasks. Replace these outcomes with explicit failures and retain
+artifacts needed for retry; verify action ownership and absence after deletion.
+The Hermes Windows cleanup in PR #802 provides a separate verified path; bringing
+Claude Code onto that path and verifying its historical registrations belongs to
+this task. Linux/macOS inspection and removal remain platform-specific subtasks.
+
 ### Acceptance Criteria for Each Platform
 
 - Provide runnable inspection and targeted removal commands, preferably using the existing `memu-claude-code schedule` integration. Discuss the exact command interface when claiming the task.

@@ -56,6 +56,23 @@ memu-hermes remove-instruction
 
 These commands use the active Hermes home described above, remove all complete
 managed blocks belonging to `memu-hermes`, and preserve other SOUL.md content.
-Restart Hermes after cleanup. Inspect and remove previous scheduled bridging
-tasks separately to avoid duplicate processing.
+Restart Hermes after cleanup.
+
+On Windows, install and uninstall automatically inspect legacy tasks under
+`\memU\` using the recognized task names, expected PowerShell wrapper action,
+and working directory. Cleanup errors stop the operation; removal is verified
+by querying Task Scheduler again. Generated scripts, logs, and memory are kept.
+Use the original `--base-dir` for a custom legacy workspace. To preview or remove
+these registrations directly:
+
+```sh
+memu-hermes schedule status
+memu-hermes schedule uninstall
+```
+
+The verified cleanup covers Windows Task Scheduler only. Linux/macOS schedules
+and Hermes native cron jobs still require separate inspection and removal.
+For native jobs, run `hermes cron list --all`, remove only confirmed memU bridging
+job IDs with `hermes cron remove <job-id>`, then list again to confirm absence.
+Do this before relying on hooks to avoid duplicate processing.
 Stop on a nonzero installer exit and report its diagnostic.

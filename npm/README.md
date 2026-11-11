@@ -58,6 +58,11 @@ Using Python already? Skip npm entirely: `uvx --from memu-cli memu --help`, or `
 
 See the [main README](https://github.com/NevaMind-AI/MemU#readme) for the memory model, library API, and self-hosting options.
 
+For the Python package's Hermes adapter, Windows hook installation/removal now
+verifies legacy Task Scheduler cleanup before continuing. Inspection or removal
+failures return a nonzero exit. See the [Hermes guide](../src/memu/hosts/hermes/INSTALL.md)
+for the supported scope and commands.
+
 ## License
 
 Apache-2.0

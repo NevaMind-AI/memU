@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import platform
 import shutil
 from typing import Any
 
@@ -40,6 +41,13 @@ async def _stage(stage: int, args: argparse.Namespace) -> None:
         with workspace_lock(lock) as acquired:
             if not acquired:
                 raise lifecycle.Blocked("Another Hermes plugin update is running; retry later.")  # noqa: TRY003
+            if platform.system() == "Windows" and await _command([
+                "schedule",
+                "uninstall",
+                "--base-dir",
+                str(args.base_dir),
+            ]):
+                raise lifecycle.Blocked("Legacy Windows schedule cleanup failed; hooks were not installed.")  # noqa: TRY003
             path = hook_install.install(args.base_dir)
             if (path / "__init__.py").read_text(encoding="utf-8") != hook_install.plugin_content(args.base_dir) or (
                 path / "plugin.yaml"
@@ -55,7 +63,7 @@ async def run(args: argparse.Namespace) -> int:
         execute=_stage,
         welcome="\nWelcome to memU · Hermes",
         completion={
-            "notice": "Restart Hermes to load memory hooks. Remove any previously configured memU schedules separately.",
+            "notice": "Restart Hermes to load memory hooks. Non-Windows and Hermes native cron schedules require separate cleanup.",
             "hook_verification": "local_plugin_and_injection_grant_readback",
         },
     )

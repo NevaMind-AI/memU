@@ -766,6 +766,13 @@ async def _cmd_schedule(spec: HostSpec, args: argparse.Namespace) -> int:
     """
     system = platform.system()
     if system != "Windows":
+        if spec.host == "hermes" and args.action in {"status", "uninstall"}:
+            print(
+                "Hermes legacy schedule inspection/removal is verified only on Windows. "
+                "No cron, launchd or Hermes native cron tasks were inspected or removed.",
+                file=sys.stderr,
+            )
+            return 1
         print(
             f"{spec.display} bridging on {system or 'this OS'} is scheduled with cron or launchd — "
             f"follow that section of `{spec.binary} docs task`. The `schedule` helper automates "
@@ -776,6 +783,8 @@ async def _cmd_schedule(spec: HostSpec, args: argparse.Namespace) -> int:
     from memu.hosts import scheduling
 
     layout = _layout(spec, args)
+    if args.action in {"status", "uninstall"} and spec.host == "hermes":
+        return scheduling.cleanup(spec, layout, remove=args.action == "uninstall")
     if args.action == "install":
         return scheduling.install(spec, layout, interval_minutes=args.interval)
     if args.action == "uninstall":

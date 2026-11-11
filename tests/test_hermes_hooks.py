@@ -23,6 +23,7 @@ def machine(tmp_path, monkeypatch):
     home, base = tmp_path / "hermes", tmp_path / "state"
     monkeypatch.setenv("HERMES_HOME", str(home))
     monkeypatch.setattr(install.shutil, "which", lambda _: "hermes")
+    monkeypatch.setattr(install.platform, "system", lambda: "Windows")
     monkeypatch.setattr(config_file, "read", lambda: {"MEMU_MEMORY_MODE": "cloud", "MEMU_CLOUD_API_KEY": "test"})
     monkeypatch.setattr(installation.events, "record", lambda *a, **k: None)
     calls = []
@@ -143,6 +144,7 @@ def test_install_and_uninstall_preserve_settings_and_memory(machine, capsys):
         == [
             ["--version"],
             ["doctor", "--backend-only"],
+            ["schedule", "uninstall", "--base-dir", str(base)],
             ["config", "set", hook_install.INJECTION_KEY, "true"],
             ["config", "get", hook_install.INJECTION_KEY, "--json"],
             ["plugins", "enable", hook_install.NAME],

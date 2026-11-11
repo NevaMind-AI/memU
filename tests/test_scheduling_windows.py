@@ -476,7 +476,6 @@ def test_hermes_guide_migrates_native_job_before_os_registration() -> None:
     ("pkg", "binary", "identity"),
     [
         ("cursor", "memu-cursor", r"hosts/cursor/bridge\.sh|memU bridging pipeline"),
-        ("hermes", "memu-hermes", r"hosts/hermes/bridge\.sh|memU bridging pipeline"),
         ("generic", "memu-agent", r"hosts/agent/bridge\.sh|memU bridging pipeline"),
         ("openclaw", "memu-openclaw", ".cron_job.openclaw.json"),
         ("workbuddy", "memu-workbuddy", "WorkBuddy's automation list"),

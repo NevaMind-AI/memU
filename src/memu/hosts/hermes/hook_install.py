@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -113,6 +115,13 @@ async def remove(args: argparse.Namespace) -> int:
             print("Another Hermes plugin update is running", file=sys.stderr)
             return 2
         destination = target()
+        if platform.system() == "Windows":
+            from memu.hosts.hermes.install import _command
+
+            with contextlib.redirect_stdout(sys.stderr):
+                code = await _command(["schedule", "uninstall", "--base-dir", str(args.base_dir)])
+            if code:
+                return 1
         removed = int(destination.exists())
         if removed:
             # Hermes owns config bookkeeping and unloading. Refuse unknown user files
@@ -144,5 +153,8 @@ async def remove(args: argparse.Namespace) -> int:
 
 def register(sub: Any) -> None:
     parser = sub.add_parser("uninstall", help="Remove memU's Hermes plugin; preserve settings, sessions and memory")
+    from memu.hosts.hermes.cli import SPEC
+
+    parser.add_argument("--base-dir", default=SPEC.default_base_dir, help="memU working directory for legacy tasks")
     parser.add_argument("--json", action="store_true")
     parser.set_defaults(handler=remove)

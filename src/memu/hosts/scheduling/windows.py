@@ -361,6 +361,55 @@ def uninstall(spec: HostSpec, layout: Layout) -> int:
     return 0
 
 
+def cleanup_script(spec: HostSpec, layout: Layout, *, remove: bool) -> str:
+    """Inspect exact legacy identities and actions; verify absence after removal."""
+    names = ", ".join(_ps_quote(name) for name in spec.all_task_names)
+    wrapper = layout.base / WRAPPER_NAME
+    arguments = f'-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{wrapper}"'
+    return "\n".join([
+        "$ErrorActionPreference = 'Stop'",
+        "try {",
+        f"$names = @({names})",
+        f"$tasks = @(Get-ScheduledTask -ErrorAction Stop | Where-Object {{ $_.TaskPath -eq {_ps_quote(TASK_PATH)} "
+        "-and $_.TaskName -in $names })",
+        # Validate every candidate before deleting any, including coexisting former names.
+        "foreach ($task in $tasks) {",
+        "if (@($task.Actions).Count -ne 1 "
+        "-or (Split-Path -Leaf $task.Actions[0].Execute) -ne 'powershell.exe' "
+        f"-or $task.Actions[0].Arguments -ne {_ps_quote(arguments)} "
+        f"-or $task.Actions[0].WorkingDirectory -ne {_ps_quote(str(layout.base))}) "
+        "{ throw ('Unrecognized legacy task action: ' + $task.TaskName) }",
+        "}",
+        *(
+            [
+                "foreach ($task in $tasks) {",
+                "Unregister-ScheduledTask -InputObject $task -Confirm:$false -ErrorAction Stop",
+                "}",
+                f"$remaining = @(Get-ScheduledTask -ErrorAction Stop | Where-Object {{ $_.TaskPath -eq {_ps_quote(TASK_PATH)} "
+                "-and $_.TaskName -in $names })",
+                "if ($remaining.Count) { throw 'Legacy task removal readback failed' }",
+            ]
+            if remove
+            else []
+        ),
+        "@{ task_names = @($tasks | ForEach-Object { $_.TaskName }); "
+        f"matched = $tasks.Count; removed = {'$tasks.Count' if remove else '0'}; "
+        f"verified_absent = {'$true' if remove else '($tasks.Count -eq 0)'} }} | ConvertTo-Json -Compress",
+        "} catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }",
+    ])
+
+
+def cleanup(spec: HostSpec, layout: Layout, *, remove: bool) -> int:
+    """Fail closed on inspection, ownership, removal or readback errors; keep files."""
+    _require_windows()
+    proc = _run_powershell(cleanup_script(spec, layout, remove=remove))
+    if proc.returncode:
+        print(f"error: legacy schedule inspection/removal failed: {proc.stderr.strip()}", file=sys.stderr)
+        return 1
+    print(proc.stdout.strip())
+    return 0
+
+
 def _former_registrations(spec: HostSpec) -> tuple[str, ...]:
     return tuple(
         task_name for task_name in spec.former_task_names if _run_powershell(status_script(task_name)).returncode == 0
