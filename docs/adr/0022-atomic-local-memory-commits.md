@@ -14,7 +14,8 @@ individually, so a storage failure can publish only part of a batch.
 ## Decision
 
 Adapt the transaction and concurrency work from
-[PR #785](https://github.com/NevaMind-AI/memU/pull/785) by Ke Chen, focusing on
+[PR #785](https://github.com/NevaMind-AI/memU/pull/785) by
+[Cookie0103 (Ke Chen)](https://github.com/Cookie0103), focusing on
 SQLite and in-memory storage as requested in its review.
 
 Keep `Database` unchanged and introduce an optional `AtomicDatabase` capability.
