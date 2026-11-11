@@ -12,10 +12,11 @@ from memu.hosts import query_extraction
 from memu.hosts.claude_code import prompt_hook
 from memu.hosts.claude_code import query_extraction as claude
 from memu.hosts.codex import query_extraction as codex
+from memu.hosts.hermes import query_extraction as hermes
 from memu.hosts.pi import query_extraction as pi
 
 
-@pytest.mark.parametrize("adapter", [codex, claude, pi])
+@pytest.mark.parametrize("adapter", [codex, claude, pi, hermes])
 @pytest.mark.parametrize("outcome", ["short", "success", "timeout", "failure", "input_limit"])
 def test_shared_selection(adapter, outcome, monkeypatch):
     prompt = "topic" if outcome == "short" else "x" * (32001 if outcome == "input_limit" else 2500)
@@ -31,7 +32,10 @@ def test_shared_selection(adapter, outcome, monkeypatch):
 
     monkeypatch.setattr(adapter, "_extract", extract)
     trace: dict[str, Any] = {}
-    assert adapter.select_query(prompt, trace) == ("extracted topic" if outcome == "success" else prompt[:2000])
+    options = {"python": "hermes-python"} if adapter is hermes else {}
+    assert adapter.select_query(prompt, trace, **options) == (
+        "extracted topic" if outcome == "success" else prompt[:2000]
+    )
     assert bool(calls) == (outcome not in ("short", "input_limit"))
     assert trace["extraction_status"] == {"short": "not_needed", "success": "succeeded", "failure": "failed"}.get(
         outcome, outcome

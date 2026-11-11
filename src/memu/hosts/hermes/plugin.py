@@ -8,6 +8,7 @@ import logging
 import os
 import re
 import subprocess
+import sys
 import threading
 from contextvars import copy_context
 from typing import Any
@@ -30,11 +31,11 @@ def _call(action: str, event: dict[str, Any]) -> dict[str, Any]:
         env.pop(key, None)
     result = subprocess.run(  # noqa: S603
         [PYTHON, "-m", "memu.hosts.hermes.hook", action, "--base-dir", BASE],
-        input=json.dumps(event, ensure_ascii=False),
+        input=json.dumps({**event, "hermes_python": sys.executable}, ensure_ascii=False),
         text=True,
         encoding="utf-8",
         capture_output=True,
-        timeout=25,
+        timeout=40,
         env=env,
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         check=False,

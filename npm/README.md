@@ -61,7 +61,9 @@ See the [main README](https://github.com/NevaMind-AI/MemU#readme) for the memory
 For the Python package's Hermes adapter, Windows hook installation/removal now
 verifies legacy Task Scheduler cleanup before continuing. Inspection or removal
 failures return a nonzero exit. See the [Hermes guide](../src/memu/hosts/hermes/INSTALL.md)
-for the supported scope and commands.
+for the supported scope and commands. Hermes long-input retrieval extracts a
+query through the host's configured model/provider in the background, with a
+12-second extraction timeout and a bounded original-text fallback.
 
 ## License
 

@@ -38,8 +38,15 @@ invalidates its pending deliveries. When queued input is merged with a result,
 its user-authored text is kept. Prepared memory transcripts omit the marked
 retrieval context so it is not mined again as new user information.
 The worker uses the existing Hermes model/provider configuration. The installer
-does not verify model access with a paid request. Background retrieval is bounded
-to 20 seconds and uses at most the first 2,000 characters of the user text.
+does not verify model access during installation. Long inputs (at least 200
+non-whitespace characters) use a tool-free query extraction request in Hermes's
+Python environment with its configured model/provider. Extraction runs in the
+background before retrieval and has a 12-second deadline. Inputs over 32,000
+characters skip extraction; timeout, missing runtime support, or invalid output
+falls back to the original first 2,000 characters. Successful extracted queries
+are limited to 200 characters. Retrieval then has its own 20-second timeout.
+The first answer remains free to finish while extraction and retrieval run.
+Extraction status, query source, and truncation are recorded in retrieval traces.
 Hook diagnostics live under `~/.memu/hosts/hermes/log/hooks/`.
 The plugin runs memU with its installing Python runtime and clears inherited
 `PYTHONPATH`/`PYTHONHOME` overrides. Subprocess startup errors, including the exit

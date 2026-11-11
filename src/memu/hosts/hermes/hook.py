@@ -18,9 +18,9 @@ from uuid import uuid4
 
 from memu.env import LONG_QUERY_CHARS
 from memu.hosts.bridging import Layout, self_sessions
+from memu.hosts.hermes.query_extraction import select_query
 from memu.hosts.hermes.sessions import hermes_home, state_db_path
 from memu.hosts.hooks import worker
-from memu.hosts.query_extraction import QUERY_MAX_CHARS
 from memu.hosts.retrieval import QueryKind, render_context, retrieve
 
 
@@ -45,10 +45,16 @@ async def retrieve_context(base: Path, event: dict[str, Any]) -> dict[str, Any]:
         if not prompt.strip():
             trace["status"] = "input_skipped"
             return {"context": None}
-        # ponytail: bounded prefix for long prompts; add Hermes query extraction when needed.
-        query = prompt[:QUERY_MAX_CHARS]
-        kind: QueryKind = "long" if sum(not char.isspace() for char in prompt) >= LONG_QUERY_CHARS else "short"
-        trace.update(query=query, query_kind=kind, query_truncated=len(query) < len(prompt))
+        python = event.get("hermes_python")
+        query = await asyncio.to_thread(select_query, prompt, trace, python=python if isinstance(python, str) else None)
+        kind: QueryKind = (
+            "extracted"
+            if trace.get("query_source") == "extracted"
+            else "long"
+            if sum(not char.isspace() for char in prompt) >= LONG_QUERY_CHARS
+            else "short"
+        )
+        trace.update(query=query, query_kind=kind, query_truncated=trace.get("query_source") == "prefix")
         memories = await asyncio.wait_for(retrieve(query, query_kind=kind), timeout=20)
         context = render_context(memories)
         trace.update(status="context_returned", retrieve_result=memories, additional_context=context)
