@@ -93,13 +93,6 @@ Once the scheduled bridging task is installed, memU can turn useful agent histor
 5. **Commit and index.** `commit` submits changed skill files through `commit_results`; memU embeds the skill name and description and stores it under the `skill` track.
 6. **Retrieve it later.** On a similar future task, memU returns the relevant skill so any connected agent can use the learned workflow.
 
-Commits on the SQLite and in-memory backends publish resources, recall files, and
-search segments atomically. Concurrent commits recheck stored state after
-embedding, and retrieval reads a consistent snapshot. Full-body updates remain
-last-writer-wins; this does not merge concurrent edits or reject stale input
-versions. Other backends retain their existing write behavior. See
-[ADR 0022](docs/adr/0022-atomic-local-memory-commits.md).
-
 The judgment and synthesis stay inside the agent. `MemoryService` makes no LLM or chat calls; it stores, embeds, and retrieves the skill Markdown the agent prepared.
 
 ## Self-hosted
