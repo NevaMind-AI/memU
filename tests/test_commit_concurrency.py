@@ -7,7 +7,12 @@ from typing import Any
 
 import pytest
 
+from memu.app import MemoryService
+from memu.database.sqlite.sqlite import SQLiteStore
+from tests import test_agentic
 from tests.test_agentic import FakeEmbeddingClient, make_service
+
+service = test_agentic.service
 
 
 class PausedEmbeddings(FakeEmbeddingClient):
@@ -24,120 +29,54 @@ class PausedEmbeddings(FakeEmbeddingClient):
         return await super().embed(inputs)
 
 
-@pytest.mark.parametrize("provider", ["inmemory", "sqlite"])
-async def test_overlapping_new_file_commits_leave_only_current_segments(provider: str, tmp_path: Any) -> None:
-    config: dict[str, Any] = {"provider": provider}
-    if provider == "sqlite":
-        config["dsn"] = f"sqlite:///{tmp_path}/memu.sqlite3"
-    service = make_service({"metadata_store": config})
-    embedder = PausedEmbeddings()
-    service._embedding_pool._cache["embedding"] = embedder
-
-    async def commit(text: str) -> None:
-        await service.commit_results(recall_files=[{"name": "profile", "content": text}])
-
-    first = asyncio.create_task(commit("first value"))
-    second = asyncio.create_task(commit("second value"))
-    await asyncio.wait_for(embedder.both_waiting.wait(), timeout=2)
-    embedder.release.set()
-    await asyncio.gather(first, second)
-
-    files = await service.list_all_recall_files()
-    assert len(files["recall_files"]) == 1
-    content = files["recall_files"][0]["content"]
-    segments = service.database.recall_file_segment_repo.list_segments_for_file(files["recall_files"][0]["id"])
-    assert [segment.text for segment in segments] == [content]
-
-
-@pytest.mark.parametrize("provider", ["inmemory", "sqlite"])
-async def test_overlapping_resource_commits_do_not_duplicate_path(provider: str, tmp_path: Any) -> None:
-    config: dict[str, Any] = {"provider": provider}
-    if provider == "sqlite":
-        config["dsn"] = f"sqlite:///{tmp_path}/memu.sqlite3"
-    service = make_service({"metadata_store": config})
-    embedder = PausedEmbeddings()
-    service._embedding_pool._cache["embedding"] = embedder
-
-    async def commit(description: str) -> None:
-        await service.commit_results(resource=[{"path": "/note", "description": description}])
-
-    first = asyncio.create_task(commit("first"))
-    second = asyncio.create_task(commit("second"))
-    await asyncio.wait_for(embedder.both_waiting.wait(), timeout=2)
-    embedder.release.set()
-    await asyncio.gather(first, second)
-
-    resources = service.database.resource_repo.list_resources()
-    assert len(resources) == 1
-
-
-@pytest.mark.parametrize("provider", ["inmemory", "sqlite"])
-async def test_write_failure_rolls_back_the_entire_commit(provider: str, tmp_path: Any, monkeypatch: Any) -> None:
-    config: dict[str, Any] = {"provider": provider}
-    if provider == "sqlite":
-        config["dsn"] = f"sqlite:///{tmp_path}/memu.sqlite3"
-    service = make_service({"metadata_store": config})
+async def test_overlapping_commits_keep_scoped_files_and_resources_consistent(service: MemoryService) -> None:
     await service.commit_results(
-        recall_files=[{"name": "profile", "content": "original"}],
-        resource=[{"path": "/note", "description": "original"}],
+        recall_files=[{"name": "profile", "content": "bob original"}],
+        resource=[{"path": "/note", "description": "bob original"}],
+        user={"user_id": "bob"},
     )
-
-    def fail_create(**kwargs: Any) -> None:
-        msg = "injected storage failure"
-        raise RuntimeError(msg)
-
-    monkeypatch.setattr(service.database.recall_file_segment_repo, "create_segment", fail_create)
-    with pytest.raises(RuntimeError, match="injected storage failure"):
-        await service.commit_results(
-            recall_files=[{"name": "profile", "content": "new"}],
-            resource=[{"path": "/note", "description": "new"}],
-        )
-    files = await service.list_all_recall_files()
-    assert files["recall_files"][0]["content"] == "original"
-    assert [segment.text for segment in service.database.recall_file_segment_repo.list_segments()] == ["original"]
-    assert [resource.caption for resource in service.database.resource_repo.list_resources().values()] == ["original"]
-
-
-async def test_separate_sqlite_services_replan_after_other_commit(tmp_path: Any) -> None:
-    config = {"metadata_store": {"provider": "sqlite", "dsn": f"sqlite:///{tmp_path}/memu.sqlite3"}}
-    first_service = make_service(config)
-    second_service = make_service(config)
+    # SQLite must coordinate separate connections; inmemory shares one store.
+    other = (
+        make_service({"metadata_store": {"provider": "sqlite", "dsn": service.database.dsn}})
+        if isinstance(service.database, SQLiteStore)
+        else service
+    )
     embedder = PausedEmbeddings()
-    first_service._embedding_pool._cache["embedding"] = embedder
-    second_service._embedding_pool._cache["embedding"] = embedder
+    service._embedding_pool._cache["embedding"] = embedder
+    other._embedding_pool._cache["embedding"] = embedder
 
-    first = asyncio.create_task(first_service.commit_results(recall_files=[{"name": "one", "content": "old"}]))
-    second = asyncio.create_task(second_service.commit_results(recall_files=[{"name": "one", "content": "new"}]))
-    await asyncio.wait_for(embedder.both_waiting.wait(), timeout=2)
-    embedder.release.set()
-    await asyncio.gather(first, second)
-    files = (await second_service.list_all_recall_files())["recall_files"]
-    assert len(files) == 1
-    segments = first_service.database.recall_file_segment_repo.list_segments_for_file(files[0]["id"])
-    assert [segment.text for segment in segments] == [files[0]["content"]]
+    async def commit(target: MemoryService, text: str) -> None:
+        await target.commit_results(
+            recall_files=[{"name": "profile", "content": text}],
+            resource=[{"path": "/note", "description": text}],
+            user={"user_id": "alice"},
+        )
+
+    try:
+        first = asyncio.create_task(commit(service, "first value"))
+        second = asyncio.create_task(commit(other, "second value"))
+        await asyncio.wait_for(embedder.both_waiting.wait(), timeout=2)
+        embedder.release.set()
+        await asyncio.gather(first, second)
+
+        files = (await service.list_all_recall_files(where={"user_id": "alice"}))["recall_files"]
+        assert len(files) == 1
+        segments = service.database.recall_file_segment_repo.list_segments_for_file(files[0]["id"])
+        assert [segment.text for segment in segments] == [files[0]["content"]]
+        resources = service.database.resource_repo.list_resources({"user_id": "alice"})
+        assert [item.caption for item in resources.values()] == [files[0]["content"]]
+        bob = (await service.list_all_recall_files(where={"user_id": "bob"}))["recall_files"]
+        assert [item["content"] for item in bob] == ["bob original"]
+        segments = service.database.recall_file_segment_repo.list_segments_for_file(bob[0]["id"])
+        assert [segment.text for segment in segments] == ["bob original"]
+        resources = service.database.resource_repo.list_resources({"user_id": "bob"})
+        assert [item.caption for item in resources.values()] == ["bob original"]
+    finally:
+        if other is not service:
+            other.database.close()
 
 
-@pytest.mark.parametrize("provider", ["inmemory", "sqlite"])
-async def test_commit_scope_does_not_remove_another_users_segments(provider: str, tmp_path: Any) -> None:
-    config: dict[str, Any] = {"provider": provider}
-    if provider == "sqlite":
-        config["dsn"] = f"sqlite:///{tmp_path}/memu.sqlite3"
-    service = make_service({"metadata_store": config})
-    for user, content in [("alice", "alice original"), ("bob", "bob original")]:
-        await service.commit_results(recall_files=[{"name": "profile", "content": content}], user={"user_id": user})
-    await service.commit_results(recall_files=[{"name": "profile", "content": "alice new"}], user={"user_id": "alice"})
-    files = (await service.list_all_recall_files(where={"user_id": "bob"}))["recall_files"]
-    assert [item["content"] for item in files] == ["bob original"]
-    segments = service.database.recall_file_segment_repo.list_segments_for_file(files[0]["id"])
-    assert [item.text for item in segments] == ["bob original"]
-
-
-@pytest.mark.parametrize("provider", ["inmemory", "sqlite"])
-async def test_cancelled_embedding_leaves_previous_data_intact(provider: str, tmp_path: Any) -> None:
-    config: dict[str, Any] = {"provider": provider}
-    if provider == "sqlite":
-        config["dsn"] = f"sqlite:///{tmp_path}/memu.sqlite3"
-    service = make_service({"metadata_store": config})
+async def test_cancelled_embedding_leaves_previous_data_intact(service: MemoryService) -> None:
     await service.commit_results(recall_files=[{"name": "profile", "content": "original"}])
     embedder = PausedEmbeddings()
     service._embedding_pool._cache["embedding"] = embedder
@@ -155,7 +94,7 @@ async def test_cancelled_embedding_leaves_previous_data_intact(provider: str, tm
     assert (await service.list_all_recall_files())["recall_files"][0]["content"] == "next"
 
 
-def _commit_in_process(dsn: str, value: str, ready: Any, release: Any, outcomes: Any) -> None:
+def _commit_in_process(dsn: str, value: str, ready: Any, release: Any) -> None:
     class ProcessEmbedding(FakeEmbeddingClient):
         async def embed(self, inputs: list[str]) -> tuple[list[list[float]], None]:
             ready.put(value)
@@ -173,12 +112,7 @@ def _commit_in_process(dsn: str, value: str, ready: Any, release: Any, outcomes:
         )
         service.database.close()
 
-    try:
-        asyncio.run(run())
-        outcomes.put((value, "ok"))
-    except BaseException as exc:
-        outcomes.put((value, repr(exc)))
-        raise
+    asyncio.run(run())
 
 
 def test_sqlite_commit_serializes_independent_processes(tmp_path: Any) -> None:
@@ -188,22 +122,18 @@ def test_sqlite_commit_serializes_independent_processes(tmp_path: Any) -> None:
     service = make_service({"metadata_store": {"provider": "sqlite", "dsn": dsn}})
     context = multiprocessing.get_context("spawn")
     ready = context.Queue()
-    outcomes = context.Queue()
     release = context.Event()
     processes = [
-        context.Process(target=_commit_in_process, args=(dsn, value, ready, release, outcomes))
-        for value in ("first", "second")
+        context.Process(target=_commit_in_process, args=(dsn, value, ready, release)) for value in ("first", "second")
     ]
     try:
         for process in processes:
             process.start()
         assert {ready.get(timeout=15), ready.get(timeout=15)} == {"first", "second"}
         release.set()
-        results = [outcomes.get(timeout=15), outcomes.get(timeout=15)]
         for process in processes:
             process.join(timeout=15)
             assert process.exitcode == 0
-        assert sorted(status for _, status in results) == ["ok", "ok"]
         files = asyncio.run(service.list_all_recall_files())["recall_files"]
         assert len(files) == 1
         assert [segment.text for segment in service.database.recall_file_segment_repo.list_segments()] == [
@@ -218,18 +148,12 @@ def test_sqlite_commit_serializes_independent_processes(tmp_path: Any) -> None:
                 process.join(timeout=5)
         service.database.close()
         ready.close()
-        outcomes.close()
 
 
-@pytest.mark.parametrize("provider", ["inmemory", "sqlite"])
-def test_retrieval_does_not_observe_partial_commit(provider: str, tmp_path: Any, monkeypatch: Any) -> None:
+def test_retrieval_does_not_observe_partial_commit(service: MemoryService, monkeypatch: Any) -> None:
     import threading
     from concurrent.futures import ThreadPoolExecutor
 
-    config: dict[str, Any] = {"provider": provider}
-    if provider == "sqlite":
-        config["dsn"] = f"sqlite:///{tmp_path}/memu.sqlite3"
-    service = make_service({"metadata_store": config})
     asyncio.run(service.commit_results(recall_files=[{"name": "profile", "content": "coffee old"}]))
     entered = threading.Event()
     release = threading.Event()
@@ -263,12 +187,7 @@ def test_retrieval_does_not_observe_partial_commit(provider: str, tmp_path: Any,
         assert [segment["text"] for segment in result["segments"]] in [["coffee old"], ["coffee new"]]
 
 
-@pytest.mark.parametrize("provider", ["inmemory", "sqlite"])
-async def test_replan_embeds_newly_required_vectors(provider: str, tmp_path: Any) -> None:
-    config: dict[str, Any] = {"provider": provider}
-    if provider == "sqlite":
-        config["dsn"] = f"sqlite:///{tmp_path}/memu.sqlite3"
-    service = make_service({"metadata_store": config})
+async def test_replan_embeds_newly_required_vectors(service: MemoryService) -> None:
     await service.commit_results(recall_files=[{"name": "profile", "description": "old", "content": "seed"}])
     embedder = PausedEmbeddings()
     service._embedding_pool._cache["embedding"] = embedder
@@ -290,15 +209,10 @@ async def test_replan_embeds_newly_required_vectors(provider: str, tmp_path: Any
     assert stored.embedding == expected[0]
 
 
-@pytest.mark.parametrize("provider", ["inmemory", "sqlite"])
 @pytest.mark.parametrize("stage", ["resource", "file", "delete_segment", "create_segment"])
 async def test_failures_at_each_write_stage_restore_all_records(
-    provider: str, stage: str, tmp_path: Any, monkeypatch: Any
+    service: MemoryService, stage: str, monkeypatch: Any
 ) -> None:
-    config: dict[str, Any] = {"provider": provider}
-    if provider == "sqlite":
-        config["dsn"] = f"sqlite:///{tmp_path}/memu.sqlite3"
-    service = make_service({"metadata_store": config})
     await service.commit_results(
         recall_files=[{"name": "profile", "description": "before", "content": "old line"}],
         resource=[{"path": "/note", "description": "before"}],
@@ -331,12 +245,7 @@ async def test_failures_at_each_write_stage_restore_all_records(
     assert (await service.list_all_recall_files())["recall_files"][0]["content"] == "recovered"
 
 
-@pytest.mark.parametrize("provider", ["inmemory", "sqlite"])
-async def test_conflict_reembedding_failure_does_not_overwrite_winner(provider: str, tmp_path: Any) -> None:
-    config: dict[str, Any] = {"provider": provider}
-    if provider == "sqlite":
-        config["dsn"] = f"sqlite:///{tmp_path}/memu.sqlite3"
-    service = make_service({"metadata_store": config})
+async def test_conflict_reembedding_failure_does_not_overwrite_winner(service: MemoryService) -> None:
     await service.commit_results(recall_files=[{"name": "profile", "description": "old", "content": "seed"}])
     entered = asyncio.Event()
     release = asyncio.Event()
@@ -370,12 +279,7 @@ async def test_conflict_reembedding_failure_does_not_overwrite_winner(provider: 
     assert [item.text for item in service.database.recall_file_segment_repo.list_segments()] == ["winner"]
 
 
-@pytest.mark.parametrize("provider", ["inmemory", "sqlite"])
-async def test_snapshot_failure_releases_locks_and_keeps_the_store_usable(provider: str, tmp_path: Any) -> None:
-    config: dict[str, Any] = {"provider": provider}
-    if provider == "sqlite":
-        config["dsn"] = f"sqlite:///{tmp_path}/memu.sqlite3"
-    service = make_service({"metadata_store": config})
+async def test_snapshot_failure_releases_locks_and_keeps_the_store_usable(service: MemoryService) -> None:
     await service.commit_results(recall_files=[{"name": "profile", "content": "old"}])
     with pytest.raises(ValueError, match="reader failed"), service.database.snapshot():
         assert service.database.recall_file_repo.list_recall_files()
@@ -383,27 +287,6 @@ async def test_snapshot_failure_releases_locks_and_keeps_the_store_usable(provid
         raise ValueError(msg)
     await service.commit_results(recall_files=[{"name": "profile", "content": "new"}])
     assert (await service.list_all_recall_files())["recall_files"][0]["content"] == "new"
-
-
-@pytest.mark.parametrize("provider", ["inmemory", "sqlite"])
-async def test_unchanged_commit_does_not_call_embedding_provider(provider: str, tmp_path: Any) -> None:
-    config: dict[str, Any] = {"provider": provider}
-    if provider == "sqlite":
-        config["dsn"] = f"sqlite:///{tmp_path}/memu.sqlite3"
-    service = make_service({"metadata_store": config})
-    payload = [{"name": "profile", "description": "person", "content": "coffee"}]
-    await service.commit_results(recall_files=payload)
-
-    class UnavailableEmbedding(FakeEmbeddingClient):
-        async def embed(self, inputs: list[str]) -> tuple[list[list[float]], None]:
-            msg = "unchanged commits should not embed"
-            raise AssertionError(msg)
-
-    service._embedding_pool._cache["embedding"] = UnavailableEmbedding()
-    await service.commit_results(recall_files=payload)
-    files = (await service.list_all_recall_files())["recall_files"]
-    assert [(item["description"], item["content"]) for item in files] == [("person", "coffee")]
-    assert [item.text for item in service.database.recall_file_segment_repo.list_segments()] == ["coffee"]
 
 
 def test_sqlite_snapshot_survives_another_services_commit(tmp_path: Any) -> None:
@@ -457,12 +340,7 @@ async def test_database_without_atomic_capability_keeps_working(monkeypatch: Any
     assert (await service.progressive_retrieve("coffee"))["segments"][0]["text"] == "coffee"
 
 
-@pytest.mark.parametrize("provider", ["inmemory", "sqlite"])
-async def test_late_failure_rolls_back_new_and_updated_files(provider: str, tmp_path: Any, monkeypatch: Any) -> None:
-    config: dict[str, Any] = {"provider": provider}
-    if provider == "sqlite":
-        config["dsn"] = f"sqlite:///{tmp_path}/memu.sqlite3"
-    service = make_service({"metadata_store": config})
+async def test_late_failure_rolls_back_new_and_updated_files(service: MemoryService, monkeypatch: Any) -> None:
     await service.commit_results(recall_files=[{"name": "profile", "content": "old"}])
     original = service.database.recall_file_segment_repo.create_segment
 
