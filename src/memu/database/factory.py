@@ -23,6 +23,7 @@ def build_database(
     Supported providers:
         - "inmemory": In-memory storage (default, no persistence)
         - "postgres": PostgreSQL with optional pgvector support
+        - "mysql": MySQL database storage
         - "sqlite": SQLite file-based storage (lightweight, portable)
     """
     provider = config.metadata_store.provider
@@ -33,6 +34,11 @@ def build_database(
         from memu.database.postgres import build_postgres_database
 
         return build_postgres_database(config=config, user_model=user_model)
+    elif provider == "mysql":
+        # Lazy import to avoid requiring mysql dependencies when not using mysql
+        from memu.database.mysql import build_mysql_database
+
+        return build_mysql_database(config=config, user_model=user_model)
     elif provider == "sqlite":
         # Lazy import to avoid loading SQLite dependencies when not needed
         from memu.database.sqlite import build_sqlite_database
