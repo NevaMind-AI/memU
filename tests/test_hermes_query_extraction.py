@@ -103,7 +103,7 @@ def test_query_worker_uses_configured_runtime_without_tools(monkeypatch, tmp_pat
 def test_extraction_and_retrieval_do_not_block_plugin_hook(tmp_path, monkeypatch):
     from memu.hosts.hermes import plugin
 
-    entered, release, delivered = threading.Event(), threading.Event(), threading.Event()
+    entered, release, delivered, memorized = (threading.Event() for _ in range(4))
     callbacks = {}
     calls = []
 
@@ -121,6 +121,7 @@ def test_extraction_and_retrieval_do_not_block_plugin_hook(tmp_path, monkeypatch
         if action == "retrieve":
             return asyncio.run(hook.retrieve_context(tmp_path, {**event, "hermes_python": "host-python"}))
         calls.append(action)
+        memorized.set()
         return {}
 
     def inject(message, *, session_key):
@@ -149,4 +150,5 @@ def test_extraction_and_retrieval_do_not_block_plugin_hook(tmp_path, monkeypatch
         assert delivered.wait(3)
     callbacks["pre_llm_call"](user_message=calls[-1], session_id="s")
     callbacks["on_session_end"](session_id="s", completed=True)
+    assert memorized.wait(2)
     assert calls[0] == "retrieve" and calls[-1] == "memorize"

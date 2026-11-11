@@ -288,6 +288,9 @@ def async_plugin(plugin, monkeypatch):
         return True
 
     monkeypatch.setattr(plugin, "_call", call)
+    # State-machine tests execute launch jobs inline; the blocking-launch test below
+    # exercises real threads and the hook return boundary.
+    monkeypatch.setattr(plugin, "_launch_call", lambda action, event: plugin._call(action, event))
     monkeypatch.setattr(plugin.threading, "Thread", thread)
     ctx = SimpleNamespace(
         register_hook=lambda name, callback: callbacks.update({name: callback}), inject_message=inject
@@ -539,6 +542,54 @@ def test_launch_is_detached_and_binds_hermes_home(machine, monkeypatch):
     assert captured["env"]["HERMES_HOME"] == str(home)
     assert captured["stdin"] == hook.subprocess.DEVNULL
     assert "worker" in captured["argv"]
+
+
+@pytest.mark.parametrize("action", ["memorize", "remember-self"])
+def test_hook_never_waits_for_background_launch(plugin, monkeypatch, action):
+    import time
+
+    entered, release, finished = threading.Event(), threading.Event(), threading.Event()
+    threads = []
+    real_thread = threading.Thread
+    callbacks = {}
+    monkeypatch.setitem(sys.modules, "hermes_cli.plugin_session", SimpleNamespace(session_key=lambda: "route-s"))
+
+    def thread(*args, **kwargs):
+        worker = real_thread(*args, **kwargs)
+        threads.append(worker)
+        return worker
+
+    def call(operation, event):
+        if operation == action:
+            entered.set()
+            try:
+                release.wait(3)
+            finally:
+                finished.set()
+        return {}
+
+    monkeypatch.setattr(plugin, "_call", call)
+    monkeypatch.setattr(plugin.threading, "Thread", thread)
+    plugin.register(SimpleNamespace(register_hook=lambda name, callback: callbacks.update({name: callback})))
+    if action == "memorize":
+        callbacks["pre_llm_call"](user_message="hello", session_id="s")
+        threads[-1].join(timeout=2)
+        assert not threads[-1].is_alive()
+        invoke = lambda: callbacks["on_session_end"](session_id="s", completed=True)
+    else:
+        monkeypatch.setenv("MEMU_BRIDGING_RUN", "1")
+        invoke = lambda: callbacks["pre_llm_call"](user_message="worker", session_id="s")
+    try:
+        started = time.monotonic()
+        invoke()
+        assert time.monotonic() - started < 0.5
+        assert entered.wait(2)
+        assert not finished.is_set()
+    finally:
+        release.set()
+        for worker in threads:
+            worker.join(timeout=2)
+    assert finished.is_set()
 
 
 @pytest.mark.parametrize("name", ["INSTALL.md", "UNINSTALL.md"])

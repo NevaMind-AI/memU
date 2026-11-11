@@ -32,7 +32,10 @@ the originating session through `ctx.inject_message(session_key=...)`: an idle
 session starts a follow-up turn; a busy session finishes its current turn first.
 The first answer may precede memory context. The plugin recognizes its own
 one-use delivery marker, and waits for the retrieval continuation to complete
-before starting detached memory processing. A queued result can add a model
+before starting detached memory processing. Launching the memory worker and
+recording a worker's self-session ID also run on background threads: lifecycle
+callbacks do not wait for their subprocesses, network calls, or memory processing.
+A queued result can add a model
 turn. New input supersedes pending retrieval results; finalizing a session
 invalidates its pending deliveries. When queued input is merged with a result,
 its user-authored text is kept. Prepared memory transcripts omit the marked

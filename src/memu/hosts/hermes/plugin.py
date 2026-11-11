@@ -49,6 +49,19 @@ def _call(action: str, event: dict[str, Any]) -> dict[str, Any]:
     return output
 
 
+def _launch_call(action: str, event: dict[str, Any]) -> None:
+    def run() -> None:
+        try:
+            _call(action, event)
+        except (OSError, ValueError, TypeError, RuntimeError, subprocess.SubprocessError):
+            logger.exception("memU background %s failed", action)
+
+    try:
+        threading.Thread(target=copy_context().run, args=(run,), daemon=True).start()
+    except (OSError, RuntimeError):
+        logger.exception("memU background %s thread launch failed", action)
+
+
 def register(ctx: Any) -> None:  # noqa: C901 -- Keep per-plugin state and lifecycle callbacks together.
     from hermes_cli.plugin_session import session_key  # type: ignore[import-not-found]
 
@@ -62,10 +75,7 @@ def register(ctx: Any) -> None:  # noqa: C901 -- Keep per-plugin state and lifec
             if requests.get(sid) is not state or state["pending"] or not state["completed"]:
                 return
             del requests[sid]
-        try:
-            _call("memorize", {"session_id": sid})
-        except (OSError, ValueError, TypeError, RuntimeError, subprocess.SubprocessError):
-            logger.exception("memU background memory launch failed")
+        _launch_call("memorize", {"session_id": sid})
 
     def retrieve_in_background(state: dict[str, Any]) -> None:
         try:
@@ -98,7 +108,7 @@ def register(ctx: Any) -> None:  # noqa: C901 -- Keep per-plugin state and lifec
         try:
             sid = event.get("session_id")
             if os.environ.get("MEMU_BRIDGING_RUN"):
-                _call("remember-self", {"session_id": sid})
+                _launch_call("remember-self", {"session_id": sid})
                 return
             if event.get("parent_session_id"):
                 return
