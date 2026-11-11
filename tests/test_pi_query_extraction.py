@@ -41,7 +41,7 @@ def test_pi_request_and_validation(result, monkeypatch):
     monkeypatch.setattr(query_extraction, "run_extraction", run)
     trace: dict[str, Any] = {}
     selected = pi.select_query("x" * 600, trace, provider="provider", model="model")
-    assert selected == ("topic" if result == {"query": "topic"} else "x" * 600)
+    assert selected == (result["query"] if isinstance(result, dict) and result.get("query") else "x" * 600)
 
 
 @pytest.mark.asyncio

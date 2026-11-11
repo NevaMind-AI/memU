@@ -27,13 +27,18 @@ from __future__ import annotations
 import datetime
 import json
 import os
+import re
 import sqlite3
 import sys
 from pathlib import Path
 from typing import ClassVar
 
 from memu.hosts.base import RecordKind, TranscriptSource
-from memu.hosts.hermes.plugin import DELIVERY_PATTERN
+
+# Historical plugin deliveries remain excluded when mining existing sessions.
+DELIVERY_PATTERN = re.compile(
+    r"<!-- memu-hermes-retrieval:([0-9a-f]{32}) -->\n.*?\n<!-- /memu-hermes-retrieval:\1 -->", re.DOTALL
+)
 
 STATE_DB = "~/.hermes/state.db"
 
@@ -41,17 +46,18 @@ STATE_DB = "~/.hermes/state.db"
 def hermes_home() -> Path:
     """Resolve the Hermes home within memu-cli.
 
-    Ported from NousResearch/hermes-agent hermes_constants.py at upstream HEAD
-    760112adb6458417da8614d2269e5325f0739ed5 (2026-07-25 UTC).
+    Mirrors Hermes's environment-based profile resolution: HERMES_HOME takes
+    precedence over the platform default and its HERMES_DATA_DIR_SUFFIX.
     Hermes passes its active profile to subprocesses through HERMES_HOME.
     """
     if value := os.environ.get("HERMES_HOME", "").strip():
-        return Path(value).expanduser()
+        return Path(os.path.expandvars(value)).expanduser()
+    suffix = os.environ.get("HERMES_DATA_DIR_SUFFIX", "")
     if sys.platform == "win32":
         local_appdata = os.environ.get("LOCALAPPDATA", "").strip()
         root = Path(local_appdata) if local_appdata else Path.home() / "AppData" / "Local"
-        return root / "hermes"
-    return Path.home() / ".hermes"
+        return root / ("hermes" + suffix)
+    return Path.home() / (".hermes" + suffix)
 
 
 def state_db_path() -> Path:

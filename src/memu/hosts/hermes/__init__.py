@@ -1,10 +1,8 @@
 """The Hermes Agent host adapter — ``memu-hermes``.
 
-Binds ADR 0008's two seams onto Hermes: *record* as a scheduled bridging task
-over the SQLite session store at ``~/.hermes/state.db`` (see
-:mod:`memu.hosts.bridging`), *inject* as a standing instruction in
-``~/.hermes/SOUL.md`` that points the agent at the ``memu-hermes retrieve``
-command.
+Uses the active Hermes home's SQLite session store for explicit bridging
+commands and a managed SOUL.md block for on-demand retrieval. The adapter
+communicates through CLI commands and does not import Hermes's Python modules.
 """
 
 from memu.hosts.hermes.sessions import HermesTranscriptSource

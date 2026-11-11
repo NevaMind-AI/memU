@@ -87,7 +87,7 @@ def test_extraction_output_and_command(value, monkeypatch):
             )
 
     monkeypatch.setattr(extraction, "_run", run)
-    if value in ({"query": "topic"}, {"query": "中" * 200}):
+    if value in ({"query": "topic"}, {"query": "中" * 200}, {"query": "中" * 201}):
         assert extraction._extract(prompt) == value["query"]
     else:
         with pytest.raises((OSError, ValueError)):

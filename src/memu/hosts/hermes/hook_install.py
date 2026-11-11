@@ -1,4 +1,4 @@
-"""Install only memU-owned Hermes plugin files; delegate activation to Hermes."""
+"""Remove managed Hermes instructions and migrate legacy memU plugins via CLI."""
 
 from __future__ import annotations
 
@@ -7,32 +7,18 @@ import contextlib
 import json
 import os
 import platform
-import re
 import shutil
 import subprocess
 import sys
-from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
-from memu.hosts.bridging.recall_files import _atomic_write_text
+from memu.hosts import instruction
 from memu.hosts.hermes.sessions import hermes_home
 from memu.hosts.hooks.admission import workspace_lock
 
 NAME = "memu-memory"
-MIN_VERSION = (0, 23, 1)
-INJECTION_KEY = f"plugins.entries.{NAME}.allow_gateway_injection"
 MARKER = "# memU managed Hermes plugin."
-MANIFEST = f"""{MARKER}
-name: {NAME}
-version: "0.2.0"
-requires_hermes: ">=0.23.1"
-description: memU asynchronous retrieval and background memory
-provides_hooks:
-  - pre_llm_call
-  - on_session_end
-  - on_session_finalize
-"""
 
 
 def home() -> Path:
@@ -56,21 +42,10 @@ def target() -> Path:
     return path
 
 
-def plugin_content(base: Path) -> str:
-    template = files("memu.hosts.hermes").joinpath("plugin.py").read_text(encoding="utf-8")
-    return template.replace('"__MEMU_PYTHON__"', repr(sys.executable)).replace(
-        '"__MEMU_BASE_DIR__"', repr(str(base.expanduser().resolve()))
-    )
-
-
 def command(*argv: str) -> str:
     executable = shutil.which("hermes")
     if not executable:
         raise FileNotFoundError("hermes is not on PATH")  # noqa: TRY003
-    return _run(executable, *argv)
-
-
-def _run(executable: str, *argv: str) -> str:
     result = subprocess.run(  # noqa: S603
         [executable, *argv],
         stdin=subprocess.DEVNULL,
@@ -89,48 +64,28 @@ def _run(executable: str, *argv: str) -> str:
     return result.stdout
 
 
-def reload_gateway() -> dict[str, Any]:
-    executable = shutil.which("hermes")
-    if not executable:
-        raise FileNotFoundError("hermes is not on PATH")  # noqa: TRY003
-    python = Path(executable).with_name("python.exe" if sys.platform == "win32" else "python")
-    if not python.is_file():
-        return {"gateway_reload": "unconfirmed", "restart_required": True}
-    source = files("memu.hosts.hermes").joinpath("reload_worker.py").read_text(encoding="utf-8")
-    answer = json.loads(_run(str(python), "-c", source))
-    if answer is None:
-        return {"gateway_reload": "unconfirmed", "restart_required": True}
-    if not isinstance(answer, dict) or answer.get("reloaded") is not True:
-        raise RuntimeError("Hermes gateway refused plugin reload; run `hermes gateway restart --detach`")  # noqa: TRY003
-    activations = answer.get("activations") or []
-    hooks: list[str] = next(
-        (entry.get("activated_now", {}).get("hooks", []) for entry in activations if entry.get("key") == NAME), []
-    )
-    if not {"pre_llm_call", "on_session_end", "on_session_finalize"}.issubset(hooks):
-        raise RuntimeError("Gateway reloaded but did not confirm all memU hooks; inspect Hermes diagnostics")  # noqa: TRY003
-    return {"gateway_reload": "confirmed", "restart_required": False}
-
-
-def check_version() -> str:
-    output = command("--version")
-    match = re.search(r"(?m)^Hermes Agent v(\d+)\.(\d+)\.(\d+)(-[\w.-]+)?", output)
-    if match:
-        version = tuple(int(match[index]) for index in (1, 2, 3))
-        if MIN_VERSION <= version < (2000, 0, 0) and not (version == MIN_VERSION and match[4]):
-            return ".".join(match[index] for index in (1, 2, 3))
-    raise ValueError("Hermes >= 0.23.1 is required for asynchronous context injection; update Hermes and retry")  # noqa: TRY003
-
-
-def install(base: Path) -> Path:
+def remove_legacy_plugin() -> int:
     destination = target()
-    destination.mkdir(parents=True, exist_ok=True)
-    _atomic_write_text(destination / "__init__.py", plugin_content(base))
-    _atomic_write_text(destination / "plugin.yaml", MANIFEST)
-    command("config", "set", INJECTION_KEY, "true")
-    if json.loads(command("config", "get", INJECTION_KEY, "--json")) is not True:
-        raise RuntimeError("Hermes did not confirm the memU context injection grant")  # noqa: TRY003
-    command("plugins", "enable", NAME)
-    return destination
+    if not destination.exists():
+        return 0
+    if any(entry.name not in {"plugin.yaml", "__init__.py", "__pycache__"} for entry in destination.iterdir()):
+        raise ValueError("Hermes memU plugin contains extra files; inspect before removal")  # noqa: TRY003
+    cache = destination / "__pycache__"
+    if cache.is_symlink() or (
+        cache.exists()
+        and any(
+            entry.is_symlink()
+            or not entry.is_file()
+            or not entry.name.startswith("__init__.")
+            or entry.suffix != ".pyc"
+            for entry in cache.iterdir()
+        )
+    ):
+        raise ValueError("Hermes memU plugin cache contains unowned files")  # noqa: TRY003
+    command("plugins", "remove", NAME)
+    if destination.exists():
+        raise RuntimeError("Hermes plugin removal did not remove the managed directory")  # noqa: TRY003
+    return 1
 
 
 async def remove(args: argparse.Namespace) -> int:
@@ -138,9 +93,8 @@ async def remove(args: argparse.Namespace) -> int:
     lock.mkdir(parents=True, exist_ok=True)
     with workspace_lock(lock) as acquired:
         if not acquired:
-            print("Another Hermes plugin update is running", file=sys.stderr)
+            print("Another Hermes installation update is running", file=sys.stderr)
             return 2
-        destination = target()
         if platform.system() == "Windows":
             from memu.hosts.hermes.install import _command
 
@@ -148,37 +102,21 @@ async def remove(args: argparse.Namespace) -> int:
                 code = await _command(["schedule", "uninstall", "--base-dir", str(args.base_dir)])
             if code:
                 return 1
-        removed = int(destination.exists())
-        if removed:
-            # Hermes owns config bookkeeping and unloading. Refuse unknown user files
-            # before asking its native remove command to remove the plugin directory.
-            if any(entry.name not in {"plugin.yaml", "__init__.py", "__pycache__"} for entry in destination.iterdir()):
-                raise ValueError("Hermes memU plugin contains extra files; inspect before removal")  # noqa: TRY003
-            cache = destination / "__pycache__"
-            if cache.is_symlink() or (
-                cache.exists()
-                and any(
-                    entry.is_symlink()
-                    or not entry.is_file()
-                    or not entry.name.startswith("__init__.")
-                    or entry.suffix != ".pyc"
-                    for entry in cache.iterdir()
-                )
-            ):
-                raise ValueError("Hermes memU plugin cache contains unowned files")  # noqa: TRY003
-            command("plugins", "remove", NAME)
-            if destination.exists():
-                raise RuntimeError("Hermes plugin removal did not remove the managed directory")  # noqa: TRY003
-    notice = "Restart Hermes to unload the memU plugin. An active memory worker may finish its current pass."
+        removed = remove_legacy_plugin()
+        instruction.remove(home() / "SOUL.md", "memu-hermes")
+        instruction.remove_skill(home() / "skills")
+    notice = (
+        "Start a fresh Hermes session to refresh SOUL.md; restart running Hermes processes after legacy plugin removal."
+    )
     if args.json:
         print(json.dumps({"status": "passed", "removed": removed, "notice": notice}))
     else:
-        print(f"Removed {removed} memU plugin(s). {notice}")
+        print(f"Removed memU instructions and {removed} legacy plugin(s). {notice}")
     return 0
 
 
 def register(sub: Any) -> None:
-    parser = sub.add_parser("uninstall", help="Remove memU's Hermes plugin; preserve settings, sessions and memory")
+    parser = sub.add_parser("uninstall", help="Remove managed Hermes instructions and legacy plugin; preserve memory")
     from memu.hosts.hermes.cli import SPEC
 
     parser.add_argument("--base-dir", default=SPEC.default_base_dir, help="memU working directory for legacy tasks")

@@ -1,4 +1,4 @@
-"""Hermes legacy schedule cleanup must prove removal before enabling hooks."""
+"""Hermes legacy schedule cleanup must prove removal before patching SOUL.md."""
 
 from __future__ import annotations
 
@@ -94,7 +94,7 @@ def test_cleanup_failure_stops_plugin_changes(monkeypatch, tmp_path, operation):
         return 1
 
     monkeypatch.setattr(install, "_command", command)
-    monkeypatch.setattr(hook_install, "install", lambda _: pytest.fail("must not install hooks"))
+    monkeypatch.setattr(hook_install, "remove_legacy_plugin", lambda: pytest.fail("must not change plugin"))
     monkeypatch.setattr(hook_install, "command", lambda *a: pytest.fail("must not remove plugin"))
     import argparse
     import asyncio

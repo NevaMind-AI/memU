@@ -102,8 +102,6 @@ module = ["pgvector.*"]
 ignore_missing_imports = true
 
 [tool.deptry.per_rule_ignores]
-# The installed Hermes plugin runs in Hermes's Python environment, which supplies these modules.
-DEP001 = ["hermes_constants", "hermes_cli", "hermes_bootstrap", "agent", "pm"]
 # memu.trust imports certifi only as a fallback, inside a try/except that
 # degrades when it is absent — so it is deliberately a transitive dependency
 # (via httpx) rather than one this package declares and would then require.

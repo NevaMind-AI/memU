@@ -159,13 +159,122 @@ def test_cli_defaults_to_the_codex_instruction_file() -> None:
 
 
 def test_hermes_is_an_inline_host() -> None:
-    """Hermes skills are pull-on-demand (skills_list/skill_view) and only a
-    relevance-selected subset is surfaced per turn, so a SOUL.md pointer to a
-    "retrieve every turn" skill never loads and the inject silently no-ops.
-    Hermes takes the full procedure inline instead — no skills_dir."""
     from memu.hosts.hermes.cli import SPEC
 
     assert SPEC.skills_dir == ""
+    text = instruction.instruction("memu-hermes")
+    assert "retrieve relevant memory on demand" in text
+    assert "Greetings" in text
+    assert "memu-hermes retrieve" in text
+    assert "before answering" not in text
+
+
+@pytest.mark.parametrize("dry_run,custom", [(False, False), (True, False), (False, True)])
+def test_hermes_inline_install_migrates_safely(tmp_path, monkeypatch, dry_run, custom):
+    from dataclasses import replace
+
+    from memu.hosts.hermes.cli import SPEC
+
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    monkeypatch.setattr(instruction.templates, "fetch", lambda *_: pytest.fail("Hermes uses its local policy"))
+    soul = tmp_path / "SOUL.md"
+    soul.write_text("User identity\n", encoding="utf-8")
+    legacy = instruction.skill_path(tmp_path / "skills")
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text("Legacy retrieval skill", encoding="utf-8")
+    parser = build_host_parser(replace(SPEC, instruction_path=str(soul)))
+    argv = ["install-instruction"]
+    target = tmp_path / "other" / "SOUL.md" if custom else soul
+    if custom:
+        argv += ["--path", str(target)]
+    if dry_run:
+        argv += ["--dry-run"]
+    args = parser.parse_args(argv)
+    assert instruction._cmd_install_instruction(args) == 0
+    if dry_run:
+        assert soul.read_text(encoding="utf-8") == "User identity\n"
+        assert legacy.exists()
+        return
+    text = target.read_text(encoding="utf-8")
+    assert "retrieve relevant memory on demand" in text
+    assert instruction._cmd_install_instruction(args) == 0
+    assert target.read_text(encoding="utf-8") == text
+    assert legacy.exists() is custom
+    if custom:
+        assert soul.read_text(encoding="utf-8") == "User identity\n"
+    else:
+        assert text.startswith("User identity\n")
+        assert instruction.refresh(soul, "memu-hermes") == [(soul, False)]
+        remove_args = parser.parse_args(["remove-instruction"])
+        assert instruction._cmd_remove_instruction(remove_args) == 0
+        assert soul.read_text(encoding="utf-8") == "User identity\n"
+        assert not legacy.exists()
+
+
+@pytest.mark.parametrize("profile", ["windows_default", "override", "suffix", "windows_fallback"])
+def test_hermes_cli_targets_active_soul_after_import(tmp_path, monkeypatch, profile):
+    from memu.hosts.hermes.cli import main
+
+    monkeypatch.setattr("memu.hosts.hermes.sessions.sys.platform", "win32")
+    monkeypatch.setattr(pathlib.Path, "home", lambda: tmp_path / "User")
+    monkeypatch.delenv("HERMES_HOME", raising=False)
+    monkeypatch.delenv("HERMES_DATA_DIR_SUFFIX", raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "Local"))
+    monkeypatch.setenv("APPDATA", str(tmp_path / "Roaming"))
+    target = tmp_path / "Local" / "hermes" / "SOUL.md"
+    if profile == "override":
+        monkeypatch.setenv("MEMU_TEST_PROFILE_ROOT", str(tmp_path / "Profiles"))
+        monkeypatch.setenv("HERMES_HOME", "$MEMU_TEST_PROFILE_ROOT/Research Hermes")
+        target = tmp_path / "Profiles" / "Research Hermes" / "SOUL.md"
+    elif profile == "suffix":
+        monkeypatch.setenv("HERMES_DATA_DIR_SUFFIX", "-test")
+        target = tmp_path / "Local" / "hermes-test" / "SOUL.md"
+    elif profile == "windows_fallback":
+        monkeypatch.delenv("LOCALAPPDATA")
+        target = tmp_path / "User" / "AppData" / "Local" / "hermes" / "SOUL.md"
+    target.parent.mkdir(parents=True)
+    target.write_text("User identity\n", encoding="utf-8")
+    assert main(["install-instruction", "--dry-run"]) == 0
+    assert target.read_text(encoding="utf-8") == "User identity\n"
+    assert main(["install-instruction"]) == 0
+    text = target.read_text(encoding="utf-8")
+    assert "retrieve relevant memory on demand" in text
+    assert main(["install-instruction"]) == 0
+    assert target.read_text(encoding="utf-8") == text
+    assert main(["remove-instruction"]) == 0
+    assert target.read_text(encoding="utf-8") == "User identity\n"
+    assert not (tmp_path / "User" / ".hermes" / "SOUL.md").exists()
+    assert not (tmp_path / "Roaming" / "hermes" / "SOUL.md").exists()
+
+
+def test_hermes_custom_remove_preserves_default_profile(tmp_path, monkeypatch):
+    from memu.hosts.hermes.cli import main
+
+    home = tmp_path / "default"
+    monkeypatch.setenv("HERMES_HOME", str(home))
+    soul = home / "SOUL.md"
+    custom = tmp_path / "other" / "SOUL.md"
+    instruction.install(soul, "memu-hermes")
+    instruction.install(custom, "memu-hermes")
+    default_text = soul.read_text(encoding="utf-8")
+    legacy = instruction.skill_path(home / "skills")
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text("Legacy retrieval procedure", encoding="utf-8")
+    assert main(["remove-instruction", "--path", str(custom), "--dry-run"]) == 0
+    assert instruction.begin("memu-hermes") in custom.read_text(encoding="utf-8")
+    assert main(["remove-instruction", "--path", str(custom)]) == 0
+    assert custom.read_text(encoding="utf-8") == ""
+    assert soul.read_text(encoding="utf-8") == default_text
+    assert legacy.read_text(encoding="utf-8") == "Legacy retrieval procedure"
+
+
+def test_hermes_rejects_split_instruction_install(tmp_path):
+    from memu.hosts.hermes.cli import SPEC
+
+    args = build_host_parser(SPEC).parse_args(["install-instruction", "--skills-dir", str(tmp_path)])
+    with pytest.raises(ValueError, match=r"inline in SOUL\.md"):
+        instruction._cmd_install_instruction(args)
+    assert not list(tmp_path.iterdir())
 
 
 def test_openclaw_is_a_skill_host() -> None:

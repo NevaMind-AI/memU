@@ -1,12 +1,11 @@
 """``memu-hermes`` — the Hermes Agent host adapter's command-line surface.
 
 The shared host-adapter verbs handle retrieval and session processing. Hermes
-also exposes CLI-managed plugin installation and removal for automatic retrieval
-and background memory.
+installs on-demand retrieval in a managed SOUL.md block.
 
 Usage:
-    memu-hermes install              # configure backend and enable memory hooks
-    memu-hermes uninstall            # remove the managed plugin
+    memu-hermes install              # configure backend and patch SOUL.md
+    memu-hermes uninstall            # remove managed instructions and legacy plugin
     memu-hermes retrieve "<query>"    # retrieve memory manually
     memu-hermes install-instruction   # the inject seam — write the retrieve instruction into SOUL.md
     memu-hermes prepare               # slice new sessions into job files
@@ -20,6 +19,7 @@ Usage:
 from __future__ import annotations
 
 import sys
+from dataclasses import replace
 from typing import Any
 
 from memu.hosts import hooks
@@ -41,8 +41,9 @@ miss sessions started elsewhere.)"""
 
 
 def _register_extra(sub: Any) -> None:
-    # Legacy installs could include a retrieval skill even though new manual
-    # instructions stay inline in SOUL.md.
+    # Retain the old skill location only for migration/removal. New retrieval
+    # instructions live entirely in the managed SOUL.md block.
+    sub.choices["install-instruction"].description = "Install on-demand memU retrieval inline in SOUL.md"
     sub.choices["remove-instruction"].set_defaults(skills_dir=str(hermes_home() / "skills"))
     install.register(sub)
     hook_install.register(sub)
@@ -70,7 +71,10 @@ SPEC = HostSpec(
 
 
 def main(argv: list[str] | None = None) -> int:
-    return run(SPEC, argv)
+    # Resolve the active profile at invocation, including embedded callers that
+    # change HERMES_HOME after importing this module.
+    spec = replace(SPEC, instruction_path=str(hermes_home() / "SOUL.md"), session_dir=str(state_db_path()))
+    return run(spec, argv)
 
 
 if __name__ == "__main__":

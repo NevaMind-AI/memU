@@ -292,7 +292,7 @@ def _valid_host_doc(host: str, filename: str, text: str) -> bool:
     if host == "claude-code" and filename in {"INSTALL.md", "UNINSTALL.md"}:
         return "<!-- memu-claude-install: cli-v1 -->" in text
     if host == "hermes" and filename in {"INSTALL.md", "UNINSTALL.md"}:
-        return "<!-- memu-hermes-install: plugin-v2 -->" in text
+        return "<!-- memu-hermes-install: soul-v1 -->" in text
     if host == "pi" and filename in {"INSTALL.md", "UNINSTALL.md"}:
         return "<!-- memu-pi-install: extension-v1 -->" in text
     return True
