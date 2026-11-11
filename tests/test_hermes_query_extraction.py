@@ -25,7 +25,9 @@ def test_extraction_uses_host_python_and_shared_runner(monkeypatch, value):
     def execute(argv, source, cwd, flags, **kwargs):
         assert argv[:2] == ["hermes-python", "-c"]
         assert "call_llm" in argv[2]
-        assert source.decode("utf-8") == query_extraction.extraction_instruction("x" * 600)
+        assert source == b""
+        assert (cwd / "request.txt").read_text(encoding="utf-8") == query_extraction.extraction_instruction("x" * 600)
+        assert argv[3] == str(cwd / "request.txt")
         assert kwargs["env"]["MEMU_BRIDGING_RUN"] == "1"
         assert "PYTHONPATH" not in kwargs["env"] and "PYTHONHOME" not in kwargs["env"]
         assert cwd.is_dir()
@@ -54,7 +56,8 @@ async def test_hook_routes_extracted_query_and_logs_selection(tmp_path, monkeypa
     assert trace["query_truncated"] is False
 
 
-def test_query_worker_uses_configured_runtime_without_tools(monkeypatch):
+@pytest.mark.parametrize("managed_dependencies", [False, True])
+def test_query_worker_uses_configured_runtime_without_tools(monkeypatch, tmp_path, managed_dependencies):
     from memu.hosts.hermes import query_worker
 
     runtime = {"provider": "custom", "base_url": "http://local", "api_key": "test", "api_mode": "chat_completions"}
@@ -68,9 +71,17 @@ def test_query_worker_uses_configured_runtime_without_tools(monkeypatch):
         assert kwargs["main_runtime"] is runtime
         assert kwargs["base_url"] == "http://local" and kwargs["api_key"] == "test"
         assert kwargs["tools"] is None and kwargs["timeout"] == 12
-        assert kwargs["messages"] == [{"role": "user", "content": "instruction"}]
+        assert kwargs["messages"][0]["role"] == "system"
+        assert kwargs["messages"][1] == {"role": "user", "content": "instruction"}
         return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content='{"query":"topic"}'))])
 
+    activated: list[Any] = []
+    monkeypatch.setattr(
+        query_worker.importlib.util, "find_spec", lambda name: object() if managed_dependencies else None
+    )
+    monkeypatch.setitem(sys.modules, "pm.environments", SimpleNamespace(activate_dependencies=activated.append))
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    monkeypatch.setitem(sys.modules, "hermes_cli", SimpleNamespace(__file__=str(tmp_path / "hermes_cli/__init__.py")))
     monkeypatch.setitem(sys.modules, "agent.auxiliary_client", SimpleNamespace(call_llm=call))
     monkeypatch.setitem(
         sys.modules,
@@ -78,10 +89,12 @@ def test_query_worker_uses_configured_runtime_without_tools(monkeypatch):
         SimpleNamespace(load_config=lambda: {"model": {"provider": "custom", "default": "configured-model"}}),
     )
     monkeypatch.setitem(sys.modules, "hermes_cli.runtime_provider", SimpleNamespace(resolve_runtime_provider=resolve))
-    import io
-
-    monkeypatch.setattr(sys, "stdin", SimpleNamespace(buffer=io.BytesIO(b"instruction")))
+    request = tmp_path / "request.txt"
+    request.write_text("instruction", encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", ["-c", str(request)])
     query_worker.main()
+    assert sys.path[0] == str(tmp_path)
+    assert activated == ([tmp_path] if managed_dependencies else [])
 
 
 def test_extraction_and_retrieval_do_not_block_plugin_hook(tmp_path, monkeypatch):

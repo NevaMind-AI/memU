@@ -25,9 +25,11 @@ def _extract(prompt: str, *, python: str | None) -> str:
     for key in ("PYTHONPATH", "PYTHONHOME"):
         env.pop(key, None)
     with tempfile.TemporaryDirectory(prefix="memu-query-") as directory:
+        request = Path(directory) / "request.txt"
+        request.write_text(query_extraction.extraction_instruction(prompt), encoding="utf-8")
         output = query_extraction.run_extraction(
-            [python, "-c", source],
-            query_extraction.extraction_instruction(prompt).encode("utf-8"),
+            [python, "-c", source, str(request)],
+            b"",
             Path(directory),
             getattr(subprocess, "CREATE_NO_WINDOW", 0),
             env=env,
