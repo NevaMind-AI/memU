@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import argparse
 import importlib.util
 import json
 import sys
 import threading
 from contextvars import ContextVar
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -232,7 +234,7 @@ def test_memory_entry_points_share_lock_and_cooldown(machine, monkeypatch, capsy
         return 0
 
     monkeypatch.setattr(host_cli, "_run_hook_pipeline", pipeline)
-    args = SimpleNamespace(base_dir=base, agent="hermes", log_path=base / "worker.log")
+    args = argparse.Namespace(base_dir=base, agent="hermes", log_path=base / "worker.log")
 
     def invoke():
         if entry == "worker":
@@ -257,6 +259,7 @@ def plugin(machine, monkeypatch):
     home, base, _ = machine
     path = hook_install.install(base) / "__init__.py"
     spec = importlib.util.spec_from_file_location("test_memu_hermes_plugin", path)
+    assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     monkeypatch.setitem(sys.modules, "hermes_constants", SimpleNamespace(get_hermes_home=lambda: home))
@@ -485,12 +488,16 @@ def test_retrieval_releases_hook_before_background_work_finishes(plugin, monkeyp
         assert release.wait(5)
         return {"context": "memory"}
 
+    def inject(*args, **kwargs):
+        delivered.set()
+        return True
+
     monkeypatch.setattr(plugin, "_call", call)
     callbacks = {}
     plugin.register(
         SimpleNamespace(
             register_hook=lambda name, callback: callbacks.update({name: callback}),
-            inject_message=lambda *a, **k: delivered.set() or True,
+            inject_message=inject,
         )
     )
     with ThreadPoolExecutor(max_workers=1) as executor:
@@ -520,7 +527,7 @@ async def test_retrieval_returns_context_and_writes_log(tmp_path, monkeypatch):
 
 def test_launch_is_detached_and_binds_hermes_home(machine, monkeypatch):
     home, base, _ = machine
-    captured = {}
+    captured: dict[str, Any] = {}
     monkeypatch.setattr(hook.subprocess, "Popen", lambda argv, **kwargs: captured.update(argv=argv, **kwargs))
     log = hook.launch_background(base)
     assert log.exists()
