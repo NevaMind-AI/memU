@@ -46,6 +46,12 @@ def machine(tmp_path, monkeypatch):
 
     monkeypatch.setattr(install, "_command", command)
     monkeypatch.setattr(hook_install, "command", plugin_command)
+
+    def reload_gateway():
+        calls.append(["reload-gateway"])
+        return {"gateway_reload": "confirmed", "restart_required": False}
+
+    monkeypatch.setattr(hook_install, "reload_gateway", reload_gateway)
     return home, base, calls
 
 
@@ -138,6 +144,8 @@ def test_install_and_uninstall_preserve_settings_and_memory(machine, capsys):
         rows = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
         assert rows[-1]["complete"] is True
         assert rows[-1]["hook_verification"] == "local_plugin_and_injection_grant_readback"
+        assert rows[-1]["gateway_reload"] == "confirmed"
+        assert rows[-1]["restart_required"] is False
         assert [r["stage"] for r in rows if r["status"] == "passed"] == [1, 2, 3]
     assert (
         calls
@@ -148,6 +156,7 @@ def test_install_and_uninstall_preserve_settings_and_memory(machine, capsys):
             ["config", "set", hook_install.INJECTION_KEY, "true"],
             ["config", "get", hook_install.INJECTION_KEY, "--json"],
             ["plugins", "enable", hook_install.NAME],
+            ["reload-gateway"],
         ]
         * 2
     )
@@ -158,6 +167,32 @@ def test_install_and_uninstall_preserve_settings_and_memory(machine, capsys):
     assert settings.read_text(encoding="utf-8") == "model: user-model\nplugins:\n  enabled: [other]\n"
     assert rules.read_text(encoding="utf-8") == "User rules"
     assert base.exists()
+
+
+@pytest.mark.parametrize("confirmed", [False, True])
+def test_install_reports_live_activation_state(machine, monkeypatch, capsys, confirmed):
+    _, base, _ = machine
+    monkeypatch.setattr(
+        hook_install,
+        "reload_gateway",
+        lambda: {"gateway_reload": "confirmed" if confirmed else "unconfirmed", "restart_required": not confirmed},
+    )
+    assert main(["install", "--non-interactive", "--json", "--base-dir", str(base)]) == 0
+    result = json.loads(capsys.readouterr().out.splitlines()[-1])
+    assert result["gateway_reload"] == ("confirmed" if confirmed else "unconfirmed")
+    assert result["restart_required"] is not confirmed
+
+
+def test_install_fails_when_live_reload_fails(machine, monkeypatch, capsys):
+    _, base, _ = machine
+
+    def failed():
+        raise RuntimeError("Gateway reloaded but did not confirm all memU hooks")  # noqa: TRY003
+
+    monkeypatch.setattr(hook_install, "reload_gateway", failed)
+    assert main(["install", "--non-interactive", "--json", "--base-dir", str(base)]) == 1
+    result = json.loads(capsys.readouterr().out.splitlines()[-1])
+    assert result["complete"] is False and "gateway restart --detach" in result["detail"]
 
 
 @pytest.mark.parametrize("failure", ["missing-host", "backend", "foreign"])

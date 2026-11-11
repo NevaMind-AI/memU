@@ -63,7 +63,10 @@ verifies legacy Task Scheduler cleanup before continuing. Inspection or removal
 failures return a nonzero exit. See the [Hermes guide](../src/memu/hosts/hermes/INSTALL.md)
 for the supported scope and commands. Hermes long-input retrieval extracts a
 query through the host's configured model/provider in the background, with a
-12-second extraction timeout and a bounded original-text fallback.
+12-second extraction timeout and a bounded original-text fallback. Every Hermes
+plugin install also attempts gateway hot reload and reports whether activation
+was confirmed; an unconfirmed result requires a fresh launch or
+`hermes gateway restart --detach`.
 
 ## License
 

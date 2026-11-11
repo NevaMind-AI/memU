@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import platform
 import shutil
 from typing import Any
@@ -56,16 +57,29 @@ async def _stage(stage: int, args: argparse.Namespace) -> None:
 
 
 async def run(args: argparse.Namespace) -> int:
+    completion: dict[str, Any] = {
+        "notice": "Unconfirmed activation requires `hermes gateway restart --detach` or a fresh gateway launch. Non-Windows and Hermes native cron schedules require separate cleanup.",
+        "hook_verification": "local_plugin_and_injection_grant_readback",
+        "gateway_reload": "unconfirmed",
+        "restart_required": True,
+    }
+
+    async def execute(stage: int, arguments: argparse.Namespace) -> None:
+        await _stage(stage, arguments)
+        if stage == 3:
+            try:
+                completion.update(await asyncio.to_thread(hook_install.reload_gateway))
+            except (OSError, ValueError, RuntimeError, hook_install.subprocess.SubprocessError) as exc:
+                message = "Gateway plugin activation failed; run `hermes gateway restart --detach` and inspect Hermes diagnostics."
+                raise lifecycle.Failed(message) from exc
+
     return await lifecycle.run(
         args,
         host="hermes",
         stages=STAGES,
-        execute=_stage,
+        execute=execute,
         welcome="\nWelcome to memU · Hermes",
-        completion={
-            "notice": "Restart Hermes to load memory hooks. Non-Windows and Hermes native cron schedules require separate cleanup.",
-            "hook_verification": "local_plugin_and_injection_grant_readback",
-        },
+        completion=completion,
     )
 
 

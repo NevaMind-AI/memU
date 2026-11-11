@@ -21,12 +21,22 @@ The installer checks Hermes availability and backend connectivity, writes the
 managed `memu-memory` plugin, grants its follow-up context injection permission
 through `hermes config set plugins.entries.memu-memory.allow_gateway_injection true`,
 reads the grant back, and enables the plugin through `hermes plugins enable`.
-It verifies the installed files locally. Other plugin entries remain intact.
+It verifies the installed files locally, then explicitly requests a live gateway
+plugin reload on every install, including updates to an already-enabled plugin.
+`gateway_reload=confirmed` and `restart_required=false` mean Hermes confirmed all
+three memU hooks active. An unavailable control channel is reported as
+`gateway_reload=unconfirmed`, `restart_required=true`; it does not prove the gateway
+is stopped. In that case start Hermes, or run `hermes gateway restart --detach`
+from a terminal and reconnect Desktop. Explicit reload refusal or missing hook
+confirmation fails installation. The installer never forces a gateway restart.
+Other plugin entries remain intact.
 Use the same `HERMES_HOME` as the Hermes profile you
 want to configure. On native Windows the default is `%LOCALAPPDATA%\hermes`;
 on Linux/macOS it is `~/.hermes`.
 
-Restart Hermes to load the plugin. `pre_llm_call` starts background retrieval
+After confirmed hot reload the hooks apply to subsequent turns in the running
+gateway. A classic standalone Hermes process still needs a restart.
+`pre_llm_call` starts background retrieval
 and immediately returns, allowing the model to answer. Results are queued into
 the originating session through `ctx.inject_message(session_key=...)`: an idle
 session starts a follow-up turn; a busy session finishes its current turn first.

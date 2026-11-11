@@ -67,6 +67,10 @@ def command(*argv: str) -> str:
     executable = shutil.which("hermes")
     if not executable:
         raise FileNotFoundError("hermes is not on PATH")  # noqa: TRY003
+    return _run(executable, *argv)
+
+
+def _run(executable: str, *argv: str) -> str:
     result = subprocess.run(  # noqa: S603
         [executable, *argv],
         stdin=subprocess.DEVNULL,
@@ -83,6 +87,28 @@ def command(*argv: str) -> str:
         print(result.stderr, file=sys.stderr)
         raise RuntimeError(f"Hermes command {argv[0]} failed")  # noqa: TRY003
     return result.stdout
+
+
+def reload_gateway() -> dict[str, Any]:
+    executable = shutil.which("hermes")
+    if not executable:
+        raise FileNotFoundError("hermes is not on PATH")  # noqa: TRY003
+    python = Path(executable).with_name("python.exe" if sys.platform == "win32" else "python")
+    if not python.is_file():
+        return {"gateway_reload": "unconfirmed", "restart_required": True}
+    source = files("memu.hosts.hermes").joinpath("reload_worker.py").read_text(encoding="utf-8")
+    answer = json.loads(_run(str(python), "-c", source))
+    if answer is None:
+        return {"gateway_reload": "unconfirmed", "restart_required": True}
+    if not isinstance(answer, dict) or answer.get("reloaded") is not True:
+        raise RuntimeError("Hermes gateway refused plugin reload; run `hermes gateway restart --detach`")  # noqa: TRY003
+    activations = answer.get("activations") or []
+    hooks: list[str] = next(
+        (entry.get("activated_now", {}).get("hooks", []) for entry in activations if entry.get("key") == NAME), []
+    )
+    if not {"pre_llm_call", "on_session_end", "on_session_finalize"}.issubset(hooks):
+        raise RuntimeError("Gateway reloaded but did not confirm all memU hooks; inspect Hermes diagnostics")  # noqa: TRY003
+    return {"gateway_reload": "confirmed", "restart_required": False}
 
 
 def check_version() -> str:
