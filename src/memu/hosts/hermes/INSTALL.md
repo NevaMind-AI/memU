@@ -49,7 +49,11 @@ The first answer remains free to finish while extraction and retrieval run.
 Extraction status, query source, and truncation are recorded in retrieval traces.
 Hook diagnostics live under `~/.memu/hosts/hermes/log/hooks/`.
 The plugin runs memU with its installing Python runtime and clears inherited
-`PYTHONPATH`/`PYTHONHOME` overrides. Subprocess startup errors, including the exit
+`PYTHONPATH`/`PYTHONHOME` overrides. Query extraction restores the running Hermes
+host's selected module paths in its own child process, including managed dependency
+environments. Hermes logs record asynchronous hook registration with the process ID,
+retrieval start, and queued context delivery so live-session timing can be checked.
+Subprocess startup errors, including the exit
 code and bounded stderr, are recorded in Hermes's agent/error logs.
 
 Existing SOUL.md instructions, skills, sessions, and memory are preserved.

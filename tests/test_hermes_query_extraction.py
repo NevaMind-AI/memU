@@ -28,6 +28,7 @@ def test_extraction_uses_host_python_and_shared_runner(monkeypatch, value):
         assert source == b""
         assert (cwd / "request.txt").read_text(encoding="utf-8") == query_extraction.extraction_instruction("x" * 600)
         assert argv[3] == str(cwd / "request.txt")
+        assert json.loads(argv[4]) == ["selected-module-path"]
         assert kwargs["env"]["MEMU_BRIDGING_RUN"] == "1"
         assert "PYTHONPATH" not in kwargs["env"] and "PYTHONHOME" not in kwargs["env"]
         assert cwd.is_dir()
@@ -35,7 +36,7 @@ def test_extraction_uses_host_python_and_shared_runner(monkeypatch, value):
 
     monkeypatch.setattr(query_extraction, "run_extraction", execute)
     trace: dict[str, Any] = {}
-    assert hermes.select_query("x" * 600, trace, python="hermes-python") == (
+    assert hermes.select_query("x" * 600, trace, python="hermes-python", python_paths=["selected-module-path"]) == (
         "topic" if value == {"query": "topic"} else "x" * 600
     )
 
@@ -57,7 +58,8 @@ async def test_hook_routes_extracted_query_and_logs_selection(tmp_path, monkeypa
 
 
 @pytest.mark.parametrize("managed_dependencies", [False, True])
-def test_query_worker_uses_configured_runtime_without_tools(monkeypatch, tmp_path, managed_dependencies):
+@pytest.mark.parametrize("host_paths", [False, True])
+def test_query_worker_uses_configured_runtime_without_tools(monkeypatch, tmp_path, managed_dependencies, host_paths):
     from memu.hosts.hermes import query_worker
 
     runtime = {"provider": "custom", "base_url": "http://local", "api_key": "test", "api_mode": "chat_completions"}
@@ -91,10 +93,11 @@ def test_query_worker_uses_configured_runtime_without_tools(monkeypatch, tmp_pat
     monkeypatch.setitem(sys.modules, "hermes_cli.runtime_provider", SimpleNamespace(resolve_runtime_provider=resolve))
     request = tmp_path / "request.txt"
     request.write_text("instruction", encoding="utf-8")
-    monkeypatch.setattr(sys, "argv", ["-c", str(request)])
+    paths = [str(tmp_path / "selected")] if host_paths else None
+    monkeypatch.setattr(sys, "argv", ["-c", str(request), json.dumps(paths)])
     query_worker.main()
-    assert sys.path[0] == str(tmp_path)
-    assert activated == ([tmp_path] if managed_dependencies else [])
+    assert sys.path[0] == (paths[0] if paths else str(tmp_path))
+    assert activated == ([tmp_path] if managed_dependencies and not host_paths else [])
 
 
 def test_extraction_and_retrieval_do_not_block_plugin_hook(tmp_path, monkeypatch):

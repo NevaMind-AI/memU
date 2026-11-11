@@ -31,7 +31,7 @@ def _call(action: str, event: dict[str, Any]) -> dict[str, Any]:
         env.pop(key, None)
     result = subprocess.run(  # noqa: S603
         [PYTHON, "-m", "memu.hosts.hermes.hook", action, "--base-dir", BASE],
-        input=json.dumps({**event, "hermes_python": sys.executable}, ensure_ascii=False),
+        input=json.dumps({**event, "hermes_python": sys.executable, "hermes_sys_path": sys.path}, ensure_ascii=False),
         text=True,
         encoding="utf-8",
         capture_output=True,
@@ -148,6 +148,7 @@ def register(ctx: Any) -> None:  # noqa: C901 -- Keep per-plugin state and lifec
                     if previous["route"] == route:
                         del requests[previous_sid]
                 requests[sid] = state
+            logger.info("memU asynchronous retrieval starting for session %s", sid)
             threading.Thread(target=copy_context().run, args=(retrieve_in_background, state), daemon=True).start()
         except (OSError, ValueError, TypeError, RuntimeError, subprocess.SubprocessError):
             logger.exception("memU retrieval launch failed")
@@ -181,3 +182,4 @@ def register(ctx: Any) -> None:  # noqa: C901 -- Keep per-plugin state and lifec
     ctx.register_hook("pre_llm_call", retrieve)
     ctx.register_hook("on_session_end", memorize)
     ctx.register_hook("on_session_finalize", finalize)
+    logger.info("memU asynchronous hooks registered in process %s", os.getpid())

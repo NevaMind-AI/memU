@@ -314,6 +314,7 @@ def test_plugin_isolates_its_python_for_all_actions(plugin, tmp_path, monkeypatc
         assert kwargs["env"]["HERMES_HOME"] == str(hook_install.home())
         assert kwargs["env"]["MEMU_BRIDGING_RUN"] == "test-worker"
         assert json.loads(kwargs["input"])["hermes_python"] == sys.executable
+        assert json.loads(kwargs["input"])["hermes_sys_path"] == sys.path
         assert kwargs["timeout"] == 40
         if action == "memorize":
             # Exercise real command dispatch without launching a memory worker.

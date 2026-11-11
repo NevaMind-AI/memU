@@ -12,16 +12,22 @@ from pathlib import Path
 def main() -> None:
     # Keep host startup diagnostics off the JSON response channel.
     with contextlib.redirect_stdout(sys.stderr):
-        import hermes_cli  # type: ignore[import-not-found]
+        paths = json.loads(sys.argv[2]) if len(sys.argv) > 2 else None
+        if paths is not None:
+            # The gateway's managed Python has no Hermes imports until its selected
+            # source/dependency paths are restored. Use the running host's exact paths.
+            if not isinstance(paths, list) or not all(isinstance(path, str) for path in paths):
+                raise ValueError("Invalid Hermes module paths")  # noqa: TRY003
+            sys.path[:] = paths
+        else:
+            import hermes_cli  # type: ignore[import-not-found]
 
-        # Editable Hermes upgrades may leave top-level modules out of the venv finder.
-        # Resolve its own package root, as the Hermes CLI bootstrap does.
-        root = Path(hermes_cli.__file__).resolve().parent.parent
-        sys.path.insert(0, str(root))
-        if importlib.util.find_spec("pm") is not None:
-            from pm.environments import activate_dependencies  # type: ignore[import-not-found]
+            root = Path(hermes_cli.__file__).resolve().parent.parent
+            sys.path.insert(0, str(root))
+            if importlib.util.find_spec("pm") is not None:
+                from pm.environments import activate_dependencies  # type: ignore[import-not-found]
 
-            activate_dependencies(root)
+                activate_dependencies(root)
         from agent.auxiliary_client import call_llm  # type: ignore[import-not-found]
         from hermes_cli.config import load_config  # type: ignore[import-not-found]
         from hermes_cli.runtime_provider import resolve_runtime_provider  # type: ignore[import-not-found]

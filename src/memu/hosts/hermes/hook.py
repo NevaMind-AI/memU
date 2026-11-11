@@ -46,7 +46,14 @@ async def retrieve_context(base: Path, event: dict[str, Any]) -> dict[str, Any]:
             trace["status"] = "input_skipped"
             return {"context": None}
         python = event.get("hermes_python")
-        query = await asyncio.to_thread(select_query, prompt, trace, python=python if isinstance(python, str) else None)
+        paths = event.get("hermes_sys_path")
+        query = await asyncio.to_thread(
+            select_query,
+            prompt,
+            trace,
+            python=python if isinstance(python, str) else None,
+            python_paths=paths if isinstance(paths, list) and all(isinstance(path, str) for path in paths) else None,
+        )
         kind: QueryKind = (
             "extracted"
             if trace.get("query_source") == "extracted"
