@@ -4,10 +4,13 @@ import base64
 import binascii
 import json
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
+
+from memu.database.interfaces import AtomicDatabase
 
 if TYPE_CHECKING:
     from memu.app.settings import ProgressiveRetrieveConfig
@@ -88,12 +91,17 @@ class _EmbeddingBatch:
         A commit with nothing to embed (a re-commit whose descriptions, captions
         and content are all unchanged) must not call the provider at all.
         """
-        if not self._texts:
+        pending = self._texts[len(self._vectors) :]
+        if not pending:
             return
-        vectors, _ = await embed_client.embed(self._texts)
-        if len(vectors) != len(self._texts):
+        vectors, _ = await embed_client.embed(pending)
+        if len(vectors) != len(pending):
             raise ValueError(_VECTOR_COUNT_MISMATCH)
-        self._vectors = vectors
+        self._vectors.extend(vectors)
+
+    @property
+    def resolved(self) -> bool:
+        return len(self._vectors) == len(self._texts)
 
     def vector(self, ticket: int | None) -> list[float]:
         """Redeem a ticket. ``None`` means planning and writing disagree."""
@@ -178,10 +186,11 @@ class AgenticMixin:
             raise ValueError(msg)
         store = self._get_database()
         where_filters = self._normalize_where(where)
-        recall_files, next_after = store.recall_file_repo.list_recall_files_page(
-            where_filters, after=_decode_cursor(cursor), limit=limit
-        )
-        recall_files_list = [self._model_dump_without_embeddings(recall_file) for recall_file in recall_files]
+        with store.snapshot() if isinstance(store, AtomicDatabase) else nullcontext():
+            recall_files, next_after = store.recall_file_repo.list_recall_files_page(
+                where_filters, after=_decode_cursor(cursor), limit=limit
+            )
+            recall_files_list = [self._model_dump_without_embeddings(recall_file) for recall_file in recall_files]
         return {"recall_files": recall_files_list, "next_cursor": _encode_cursor(next_after)}
 
     async def progressive_retrieve(
@@ -213,21 +222,22 @@ class AgenticMixin:
         embed_client = self._get_embedding_client("embedding")
         query_vector = await _embed_one(embed_client, query)
 
-        segment_hits, segment_pool = self._recall_segments(
-            store=store, where_filters=where_filters, query_vector=query_vector, enabled=config.file.enabled
-        )
-        file_hits, file_pool = self._collect_files(
-            store=store, where_filters=where_filters, segment_hits=segment_hits, segment_pool=segment_pool
-        )
-        resource_hits, resource_pool = self._recall_resources(
-            store=store, where_filters=where_filters, query_vector=query_vector, enabled=config.resource.enabled
-        )
+        with store.snapshot() if isinstance(store, AtomicDatabase) else nullcontext():
+            segment_hits, segment_pool = self._recall_segments(
+                store=store, where_filters=where_filters, query_vector=query_vector, enabled=config.file.enabled
+            )
+            file_hits, file_pool = self._collect_files(
+                store=store, where_filters=where_filters, segment_hits=segment_hits, segment_pool=segment_pool
+            )
+            resource_hits, resource_pool = self._recall_resources(
+                store=store, where_filters=where_filters, query_vector=query_vector, enabled=config.resource.enabled
+            )
 
-        return {
-            "segments": self._materialize_hits(segment_hits, segment_pool),
-            "files": self._materialize_hits(file_hits, file_pool),
-            "resources": self._materialize_hits(resource_hits, resource_pool),
-        }
+            return {
+                "segments": self._materialize_hits(segment_hits, segment_pool),
+                "files": self._materialize_hits(file_hits, file_pool),
+                "resources": self._materialize_hits(resource_hits, resource_pool),
+            }
 
     def _recall_segments(
         self,
@@ -365,33 +375,37 @@ class AgenticMixin:
 
         A commit that cannot reach the embedding provider writes nothing at all, so
         callers may retry it wholesale — which is what makes the bridging pipeline's
-        "advance state on durable success, not intent" (#518) hold. Storage failures
-        carry no such guarantee; only the embedding step is hoisted clear of the writes.
+        "advance state on durable success, not intent" (#518) hold. Storage writes
+        are committed atomically across the entire batch on SQLite
+        and inmemory. Other backends retain their existing write behavior.
         """
         store = self._get_database()
         user_scope = self.user_model(**user).model_dump() if user is not None else None
         embed_client = self._get_embedding_client("embedding")
         user_data = dict(user_scope or {})
 
-        # Plan, embed, write — strictly in that order, never interleaved. Each
-        # repo call commits its own transaction, so there is no rollback to fall
-        # back on: anything written before a failure stays written. Embedding is
-        # the only step here that can fail (a rate limit, a dead provider), so
-        # hoisting all of it ahead of the first write is what makes a failed
-        # commit a no-op rather than a half-applied one. Planning reads freely —
-        # reads leave nothing behind.
+        # Provider calls run outside the transaction. Atomic backends re-plan
+        # under write ownership so the diff cannot go stale before publication.
         batch = _EmbeddingBatch()
-        resource_plans = self._plan_resources(resource or [], store=store, user_scope=user_scope, batch=batch)
-        file_plans = self._plan_recall_files(recall_files or [], store=store, user_data=user_data, batch=batch)
-
-        await batch.resolve(embed_client)
-
-        committed_resources = self._write_resources(resource_plans, store=store, user_data=user_data, batch=batch)
-        committed_files = self._write_recall_files(file_plans, store=store, user_data=user_data, batch=batch)
-        return {
-            "resources": [self._model_dump_without_embeddings(r) for r in committed_resources],
-            "recall_files": [self._model_dump_without_embeddings(f) for f in committed_files],
-        }
+        with store.snapshot() if isinstance(store, AtomicDatabase) else nullcontext():
+            self._plan_resources(resource or [], store=store, user_scope=user_scope, batch=batch)
+            self._plan_recall_files(recall_files or [], store=store, user_data=user_data, batch=batch)
+        while True:
+            await batch.resolve(embed_client)
+            with store.atomic() if isinstance(store, AtomicDatabase) else nullcontext():
+                resource_plans = self._plan_resources(resource or [], store=store, user_scope=user_scope, batch=batch)
+                file_plans = self._plan_recall_files(recall_files or [], store=store, user_data=user_data, batch=batch)
+                if not batch.resolved:
+                    continue
+                committed_resources = self._write_resources(
+                    resource_plans, store=store, user_data=user_data, batch=batch
+                )
+                committed_files = self._write_recall_files(file_plans, store=store, user_data=user_data, batch=batch)
+                result = {
+                    "resources": [self._model_dump_without_embeddings(r) for r in committed_resources],
+                    "recall_files": [self._model_dump_without_embeddings(f) for f in committed_files],
+                }
+            return result
 
     def _plan_resources(
         self,

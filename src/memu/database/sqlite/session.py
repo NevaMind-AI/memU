@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
 from sqlalchemy.exc import SQLAlchemyError
-from sqlmodel import Session, create_engine
+from sqlmodel import create_engine
+
+from memu.database.transaction import AtomicSessionManager
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +31,21 @@ class SQLiteSessionManager:
         if engine_kwargs:
             kw.update(engine_kwargs)
         self._engine = create_engine(dsn, **kw)
+        self._atomic_manager = AtomicSessionManager(engine=self._engine)
 
-    def session(self) -> Session:
+    def session(self) -> Any:
         """Create a new database session."""
-        return Session(self._engine, expire_on_commit=False)
+        return self._atomic_manager.session()
+
+    @contextmanager
+    def atomic(self) -> Iterator[None]:
+        with self._atomic_manager.atomic():
+            yield
+
+    @contextmanager
+    def snapshot(self) -> Iterator[None]:
+        with self._atomic_manager.snapshot():
+            yield
 
     def close(self) -> None:
         """Close the database engine and release resources."""

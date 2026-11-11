@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import AbstractContextManager
 from typing import Protocol, runtime_checkable
 
 from memu.database.models import RecallFile as RecallFileRecord
@@ -27,7 +28,17 @@ class Database(Protocol):
     def close(self) -> None: ...
 
 
+@runtime_checkable
+class AtomicDatabase(Database, Protocol):
+    """Optional atomic writes and read snapshots, implemented by SQLite and inmemory."""
+
+    def atomic(self) -> AbstractContextManager[None]: ...
+
+    def snapshot(self) -> AbstractContextManager[None]: ...
+
+
 __all__ = [
+    "AtomicDatabase",
     "Database",
     "RecallFileRecord",
     "RecallFileSegmentRecord",
