@@ -150,9 +150,6 @@ Use `memu memorize` to turn application-owned conversations into memory and skil
 
 With memU Cloud, sign in at [memu.so](https://memu.so) to view your memory files. With a local installation, memory lives in the shared store configured by `MEMU_DB` in `~/.memu/config.env` — typically `~/.memu/memu.sqlite3` for local SQLite, or a Postgres DSN.
 
-Prepared memory and skill Markdown files use standalone `---` lines to delimit metadata.
-A name or description ending in `---` remains ordinary metadata when the file is committed.
-
 Once installed, your agent retrieves relevant memory automatically before answering.
 To retrieve manually, run the adapter for your host:
 
@@ -160,6 +157,17 @@ To retrieve manually, run the adapter for your host:
 memu-codex retrieve "What should I remember about this project?"
 # or: memu-claude-code / memu-cursor / memu-openclaw / memu-hermes / memu-workbuddy / memu-cola / memu-pi / memu-agent
 ```
+
+For pi, run `memu-pi install` to configure the memory backend and install the
+extension, then run `/reload` or open a new session. Submitted prompts start
+retrieval in the
+background; results enter the model context and resume an idle agent. After the
+user turn and pending retrieval settle, a background worker processes the saved
+conversation into memory using the active session's model. Workers share a lock
+and a 30-minute cooldown. Long prompts use an isolated, tool-free pi request to
+extract a search query with the active provider/model; extraction has a 12-second
+timeout and falls back to the original prefix. The installer registers and verifies
+the extension. Run `memu-pi uninstall` and reload to remove it.
 
 Host retrieval returns compact JSON with at most five self-contained `hits` plus independent `resources`. Each hit combines matched `text` with its source's `description`, `track`, and local mirror `path` (or inline `content` when no mirror is available). Its `score` describes the matched segment; `created_at` and `updated_at` describe the source file when available. Hits retain segment order, including excerpts whose source is missing; sources without matched excerpts remain source-only hits. Resources contain `path`, `caption`, and available scores/timestamps. Database IDs and scope metadata are omitted from the agent-facing output.
 
@@ -204,6 +212,13 @@ service = MemoryService(
     embedding_profiles={"default": {"provider": "jina"}},
 )
 ```
+## Community contributions
+
+Explore the community tasks ([English](docs/community/tasks.en.md) / [简体中文](docs/community/tasks.md)) and claim a task in
+[issue #790](https://github.com/NevaMind-AI/memU/issues/790). Each task has a stable
+link, a difficulty rating, and acceptance criteria. See [CONTRIBUTING.md](CONTRIBUTING.md)
+for development and PR guidelines.
+
 ## License
 
 Apache-2.0

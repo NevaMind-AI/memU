@@ -1,9 +1,5 @@
 """Scope metadata survives the public API and SQLite's export/cache boundary."""
 
-import asyncio
-import subprocess
-import sys
-from pathlib import Path
 from typing import Any
 
 import pytest
@@ -91,18 +87,39 @@ async def test_documented_sqlite_export_retains_resource_owner(tmp_path):
     assert payloads == [{"user_id": "alice"}]
 
 
-def test_custom_scope_roundtrip_in_fresh_process(tmp_path):
-    # SQLite's ORM schema factory currently shares Column instances between scope
-    # classes. A separate process reflects a deployment choosing one scope model,
-    # without changing that unrelated schema limitation in this regression.
-    result = subprocess.run(  # noqa: S603 - executes only this checked-in test with a temporary directory.
-        [sys.executable, str(Path(__file__).resolve()), str(tmp_path)],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
+async def test_distinct_scope_services_share_a_process(tmp_path):
+    # Independent applications use independent database files and schema models.
+    # Both services must remain usable after creating a second schema model.
+    scopes: list[tuple[type[BaseModel], dict[str, Any]]] = [
+        (DefaultUserModel, {"user_id": "alice"}),
+        (TenantScope, {"tenant_id": "bob", "shard": 7}),
+    ]
+    services: list[tuple[MemoryService, dict[str, Any], type[BaseModel], dict[str, Any]]] = []
+    try:
+        for index, (model, scope) in enumerate(scopes):
+            config = {"metadata_store": {"provider": "sqlite", "dsn": f"sqlite:///{tmp_path}/{index}.db"}}
+            services.append((make_service(config, model), config, model, scope))
 
-
-if __name__ == "__main__":
-    asyncio.run(assert_scope_roundtrip("sqlite", TenantScope, "tenant_id", {"shard": 7}, Path(sys.argv[1])))
+        for service, _, _, scope in services:
+            await service.commit_results(
+                recall_files=[{"name": "preferences", "description": "coffee", "content": "likes coffee"}],
+                resource=[{"path": "/workspace/notes.md", "description": "coffee notes"}],
+                user=scope,
+            )
+        for service, config, model, scope in services:
+            # Reopening also checks that cache reuse does not mix model types.
+            service.database.close()
+            reopened = make_service(config, model)
+            try:
+                listed = await reopened.list_all_recall_files(where=scope)
+                retrieved = await reopened.progressive_retrieve("coffee", where=scope)
+                assert len(listed["recall_files"]) == 1
+                for records in (listed["recall_files"], *retrieved.values()):
+                    assert records
+                    for record in records:
+                        assert {key: record.get(key) for key in scope} == scope
+            finally:
+                reopened.database.close()
+    finally:
+        for service, _, _, _ in services:
+            service.database.close()

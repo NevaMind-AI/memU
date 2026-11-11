@@ -71,6 +71,8 @@ def read_recall_file(path: Path, track: str) -> dict[str, Any]:
     Recovers name/description from the frontmatter and content from the body,
     tagging it with the ``track`` its directory represents (the file itself does
     not store the track). Mirrors the fields ``list_all_recall_files`` returns.
+    Frontmatter delimiters occupy standalone ``---`` lines; a name or description
+    ending in ``---`` remains metadata.
     """
     text = path.read_text(encoding="utf-8")
     name = ""
@@ -88,4 +90,7 @@ def read_recall_file(path: Path, track: str) -> dict[str, Any]:
                 name = value.strip()
             elif key.strip() == "description":
                 description = value.strip()
+    if not name:
+        msg = f"recall file {path.name!r} requires a non-empty name in frontmatter"
+        raise ValueError(msg)
     return {"name": name, "track": track, "description": description, "content": content}

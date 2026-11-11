@@ -360,6 +360,9 @@ class AgenticMixin:
           is a :class:`RecallFile` keyed by ``name`` within its ``track`` (``memory``/``skill``),
           with the same track-specific segment (re)generation as the workspace path.
 
+        Missing or blank recall-file names raise ``ValueError`` during planning,
+        before embedding or storage writes; correct the input before retrying.
+
         A commit that cannot reach the embedding provider writes nothing at all, so
         callers may retry it wholesale — which is what makes the bridging pipeline's
         "advance state on durable success, not intent" (#518) hold. Storage failures
@@ -522,11 +525,13 @@ class AgenticMixin:
         deduped: dict[tuple[str, str], dict[str, Any]] = {}
         for item in recall_files:
             name = (item.get("name") or "").strip().lower().replace(" ", "-").replace("_", "-")
+            if not name:
+                msg = "recall-file name must not be empty"
+                raise ValueError(msg)
             if any(char in name for char in "/\\\x00") or name in {".", ".."}:
                 msg = "recall-file name must not contain path separators or null bytes"
                 raise ValueError(msg)
-            if name:
-                deduped[(item.get("track") or "memory", name)] = item
+            deduped[(item.get("track") or "memory", name)] = item
 
         # One listing per distinct track; this used to be re-read per file.
         existing_by_track: dict[str, dict[str, RecallFile]] = {
