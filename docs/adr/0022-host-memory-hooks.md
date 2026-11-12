@@ -23,12 +23,38 @@ operations while preserving the host's timing and session identity.
 | Codex | Asynchronous `UserPromptSubmit` hook returns `additionalContext`. | A separate `UserPromptSubmit` hook launches a detached worker. |
 | Claude Code | `UserPromptSubmit` with `asyncRewake` delivers retrieved context and wakes the agent. | A separate `UserPromptSubmit` hook launches a detached worker. |
 | pi | The extension starts retrieval on `input`, continues immediately, and delivers results through `sendMessage` with `steer` and `triggerTurn`. | After `agent_settled`, pending retrieval must finish before a worker starts for the persisted session's project directory. |
-| Hermes | `pre_llm_call` starts background retrieval; `ctx.inject_message(session_key=...)` queues results in the originating session. | `on_session_end` starts a detached worker once the user turn and its retrieval continuation have completed. |
+| Hermes | A managed SOUL.md block lets the agent decide when to call `memu-hermes retrieve`. Automatic hook delivery is deferred pending upstream support. | Explicit CLI bridging commands remain available; installation does not enable automatic memorization. |
 
 Codex and Claude Code start processing available history on prompt submission;
-pi and Hermes coordinate pending retrieval with response completion before
-starting memory processing. pi's extension lifecycle and Windows
-stdin handling remain documented in ADR 0021.
+pi coordinates pending retrieval with response completion before starting memory
+processing. pi's extension lifecycle and Windows stdin handling remain documented
+in ADR 0021.
+
+### Hermes delivery limitation and current integration
+
+Hermes was initially designed to use the same prompt-submission retrieval pattern.
+The tested plugin started retrieval at `pre_llm_call`, but its injection API did
+not provide the intended mid-task context delivery and rewake behavior. During an
+active task, `ctx.inject_message()` queued the result until the current turn ended,
+then delivered it as an independent message and model turn. Users could see raw
+retrieval content presented as a user message, followed by an acknowledgment or
+question rather than a useful supplement to the original task. This disrupted
+the conversation instead of meeting the shared hook experience.
+
+The alternative investigated was `ContextEngine.select_context()` (request-time
+context selection). An isolated probe established structural feasibility, but
+real-model behavior, provider cache usage, compression, session lifecycle and
+concurrency were not sufficiently verified. It also occupies the context-engine
+slot and requires adapting compression configuration. Defer this approach and
+revisit automatic retrieval delivery when upstream provides a suitable mechanism
+for supplemental context without a synthetic user turn.
+
+For now, install the complete retrieval procedure in one managed SOUL.md block.
+The agent decides whether missing historical information warrants retrieval and
+forms a short query. Greetings and self-contained requests normally need no
+search; relevant results already in the conversation should be reused. Accept
+lower retrieval frequency rather than require a search on every turn. Hermes's
+native memory and self-authored skills can coexist with this procedure.
 
 ### Shared worker admission
 
@@ -53,21 +79,27 @@ as `skip_sessions`:
   records it in the self-session list.
 - pi allocates a worker session ID and carries the bridging-run guard; its memory
   agent disables extensions and session persistence.
-- Hermes sets `MEMU_BRIDGING_RUN=1` on the memory agent. The plugin uses the
-  `pre_llm_call` session ID to invoke `remember-self`, then skips retrieval and
-  further worker launches for that process.
+- Hermes's explicit CLI worker sets `MEMU_BRIDGING_RUN=1` and uses the existing
+  CLI-driven bridging pipeline. The SOUL.md installation does not register the
+  former plugin's session-identity or automatic worker callbacks.
 
 ### Installation and verification
 
 All four installers reuse backend configuration and `doctor --backend-only`
 before installing host integration files. Host-specific checks verify the managed
-hooks, extension or plugin. These checks establish backend connectivity and local
-integration state; they do not prove model/provider access.
+hooks, extension or instruction block. These checks establish backend connectivity
+and local integration state; they do not prove model/provider access.
 
-Hermes installs a managed `memu-memory` plugin under the active `HERMES_HOME`,
-bound to the installing Python runtime and memU workspace. Ownership and symlink
-checks guard file updates and removal. Hermes's native plugin commands handle
-activation and removal bookkeeping. Restart Hermes to load or unload the plugin.
+Hermes patches SOUL.md and verifies the managed block by reading it back. It uses
+CLI commands rather than importing Hermes's Python modules, and has no
+plugin-specific minimum version gate. Instruction refresh preserves the local
+on-demand policy. Start a fresh session to load the instruction; readback alone
+does not establish that an existing session has loaded it.
+
+Installation and removal verify legacy Windows schedule cleanup. An owned legacy
+`memu-memory` plugin is removed through Hermes's CLI and checked for directory
+absence. Ownership, symlink, CLI and readback failures stop migration. Restart
+running Hermes processes after plugin removal to unload old callbacks.
 
 memu-cli resolves Hermes paths locally from `HERMES_HOME`, then the platform
 default (`%LOCALAPPDATA%\hermes` on Windows, `~/.hermes` on POSIX). The rule is
@@ -82,22 +114,15 @@ managed block for the current host while preserving other hosts' blocks.
 Admission and pipeline behavior are shared across the four hosts. Native hook
 timing, context delivery and session identity stay in each adapter.
 
-Hermes requires **v0.23.1 or newer** for the queued injection and session routing
-contract. Its installer checks that version, grants only this plugin's
-`allow_gateway_injection` through the native config command, and reads the boolean
-back before enabling the plugin. Retrieval runs on a daemon thread with a copy
-of the originating task context and an explicit session routing key. A one-use
-nonce identifies each delivered context, so it does not trigger retrieval again.
-New input supersedes pending results for the route; session finalization
-invalidates pending deliveries. Queue merging preserves the remaining user text;
-the transcript source strips paired delivery blocks before memory processing.
-Retrieval failure or rejected injection releases
-the memory worker once the original turn has completed.
+Hermes retrieval is an ordinary tool call that the agent may await and the UI may
+display. Autonomous retrieval coverage depends on the model; a successful query
+in a focused probe does not establish reliable discovery in everyday conversation.
+The service remains embedding-only and the main agent supplies the query.
 
-Hermes background retrieval is bounded to 20 seconds and uses at most the first
-2,000 prompt characters. Its memory worker uses Hermes's configured default model/provider.
-Existing scheduled tasks and standing retrieval instructions require inspection
-and cleanup when switching to hooks, so they do not duplicate processing.
+Explicit memorization commands remain available, but SOUL.md installation does
+not schedule automatic processing. Linux/macOS legacy schedules and Hermes native
+cron still require separate inspection and verified removal. Revisit automatic
+retrieval hooks after upstream context delivery supports the intended experience.
 
 ## References
 
