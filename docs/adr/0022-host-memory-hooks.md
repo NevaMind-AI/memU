@@ -47,7 +47,12 @@ real-model behavior, provider cache usage, compression, session lifecycle and
 concurrency were not sufficiently verified. It also occupies the context-engine
 slot and requires adapting compression configuration. Defer this approach and
 revisit automatic retrieval delivery when upstream provides a suitable mechanism
-for supplemental context without a synthetic user turn.
+for supplemental context without a synthetic user turn. Related upstream
+discussion: [hermes-agent#108497 — deterministic selective context through
+`ContextEngine.select_context()`](https://github.com/NousResearch/hermes-agent/issues/108497)
+proposes opt-in request selection while preserving canonical history and asks
+maintainers about the supporting workflow-event interfaces. It is a related
+feature proposal, not confirmation that memU's delivery requirements are supported.
 
 For now, install the complete retrieval procedure in one managed SOUL.md block.
 The agent decides whether missing historical information warrants retrieval and
