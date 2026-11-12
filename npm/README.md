@@ -58,21 +58,6 @@ Using Python already? Skip npm entirely: `uvx --from memu-cli memu --help`, or `
 
 See the [main README](https://github.com/NevaMind-AI/MemU#readme) for the memory model, library API, and self-hosting options.
 
-The Hermes adapter installs on-demand retrieval as one managed SOUL.md block
-through `memu-hermes install`. It resolves the active profile with `hermes_home()`,
-lets the agent decide when memory would help, and reuses the retrieval CLI.
-Greetings and self-contained tasks normally need no search. Installation reads
-back the instruction and verifies legacy Windows schedule cleanup; failures
-return nonzero. Legacy plugin removal uses Hermes's CLI. The adapter does not
-import Hermes Python modules or require v0.23.1. Start a fresh Hermes session to
-load the instruction, and restart running processes after legacy plugin removal.
-See the [Hermes guide](../src/memu/hosts/hermes/INSTALL.md) for supported cleanup
-scope and commands. SOUL.md installation does not schedule memorization.
-
-Host adapters that perform query extraction prefer short topic phrases or
-discriminating keywords and accept nonempty queries without rejecting them for
-exceeding 200 characters.
-
 ## License
 
 Apache-2.0
