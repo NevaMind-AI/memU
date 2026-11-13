@@ -7,7 +7,6 @@ import json
 import sqlite3
 import subprocess
 import sys
-
 from pathlib import Path
 from typing import Any
 
@@ -82,9 +81,16 @@ def test_installed_shell_command_starts_detached_worker(tmp_path, monkeypatch):
     installed = config["on_session_end"][0]["command"]
     started = time.monotonic()
     result = subprocess.run(  # noqa: S603
-        shlex.split(installed), input=json.dumps({"hook_event_name": "on_session_end", "session_id": "real-user",
-        "extra": {"completed": True, "failed": False, "interrupted": False}}),
-        capture_output=True, text=True, encoding="utf-8", timeout=10,
+        shlex.split(installed),
+        input=json.dumps({
+            "hook_event_name": "on_session_end",
+            "session_id": "real-user",
+            "extra": {"completed": True, "failed": False, "interrupted": False},
+        }),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=10,
     )
     assert result.returncode == 0, result.stderr
     assert time.monotonic() - started < 10
