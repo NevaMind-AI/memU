@@ -94,6 +94,7 @@ def test_cleanup_failure_stops_plugin_changes(monkeypatch, tmp_path, operation):
         return 1
 
     monkeypatch.setattr(install, "_command", command)
+    monkeypatch.setattr(hook_install, "configure_memorize", lambda _: None)
     monkeypatch.setattr(hook_install, "remove_legacy_plugin", lambda: pytest.fail("must not change plugin"))
     monkeypatch.setattr(hook_install, "command", lambda *a: pytest.fail("must not remove plugin"))
     import argparse

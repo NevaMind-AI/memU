@@ -10,9 +10,11 @@ memu-hermes install --non-interactive --language en
 ```
 
 The installer checks CLI availability, configures and checks the memory backend,
-cleans verified legacy Windows schedules, removes a legacy managed memU plugin
-when present, and installs the complete retrieval procedure in one managed
-SOUL.md block. It reads the block back before reporting success. Repeating
+registers an `on_session_end` shell hook for detached memorization, and verifies
+that Hermes recognizes the hook. It then cleans verified legacy Windows schedules,
+removes a legacy managed memU plugin when present, and installs the complete
+retrieval procedure in one managed SOUL.md block. It reads the instruction and
+hook configuration back before reporting success. Repeating
 installation updates the block in place while preserving other SOUL.md content.
 The integration patches the instruction file and uses subprocess CLI commands;
 it does not load Hermes's Python modules or require Hermes v0.23.1.
@@ -84,8 +86,22 @@ exit and report its diagnostic.
 
 ## Memorization
 
-SOUL.md installation configures on-demand retrieval only. It does not schedule
-background memorization. The existing `prepare`, `verify-resources`, `commit`,
-and CLI-driven `hook-run` bridging commands remain available for explicitly
-managed memory processing; see `memu-hermes docs task`. Agent-directed retrieval
-coverage and Desktop behavior still need broader real-model evaluation.
+Installation registers one managed `on_session_end` shell command in the profile's
+`hooks` configuration and approves only that exact event/command pair using
+Hermes's documented shell-hook allowlist. Other hooks and approvals are preserved;
+no global auto-accept setting is enabled. Hermes versions without shell-hook or
+structured CLI support fail the relevant operation instead of reporting success.
+
+A completed, non-failed, non-interrupted turn starts a detached memU worker. The
+callback does not wait for prepare, model processing, or commit. The shared
+workspace lock and 30-minute cooldown gate actual processing. Worker sessions are
+excluded using the real session ID emitted by `hermes chat` (`Session:` startup
+output and stream-json result), not the originating user's ID. Registered workers
+are ignored by later callbacks and scans. Missing CLI identity is an explicit
+worker error. Headless model access and full processing still depend on the
+configured Hermes provider.
+
+The CLI worker clears inherited user session identity, sets `MEMU_BRIDGING_RUN=1`,
+and uses `prepare`, ordered self-evolve jobs, and `commit`. Explicit `hook-run`
+uses the same admission and worker identity path. See `memu-hermes docs task` for
+bridging details. Autonomous retrieval coverage still requires broader evaluation.

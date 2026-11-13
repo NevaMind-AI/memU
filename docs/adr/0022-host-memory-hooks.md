@@ -23,7 +23,7 @@ operations while preserving the host's timing and session identity.
 | Codex | Asynchronous `UserPromptSubmit` hook returns `additionalContext`. | A separate `UserPromptSubmit` hook launches a detached worker. |
 | Claude Code | `UserPromptSubmit` with `asyncRewake` delivers retrieved context and wakes the agent. | A separate `UserPromptSubmit` hook launches a detached worker. |
 | pi | The extension starts retrieval on `input`, continues immediately, and delivers results through `sendMessage` with `steer` and `triggerTurn`. | After `agent_settled`, pending retrieval must finish before a worker starts for the persisted session's project directory. |
-| Hermes | A managed SOUL.md block lets the agent decide when to call `memu-hermes retrieve`. Automatic hook delivery is deferred pending upstream support. | Explicit CLI bridging commands remain available; installation does not enable automatic memorization. |
+| Hermes | A managed SOUL.md block lets the agent decide when to call `memu-hermes retrieve`. Automatic retrieval hook delivery is deferred pending upstream support. | An `on_session_end` shell hook launches a detached worker after completed turns, using shared admission and CLI session identity. |
 
 Codex and Claude Code start processing available history on prompt submission;
 pi coordinates pending retrieval with response completion before starting memory
@@ -84,9 +84,11 @@ as `skip_sessions`:
   records it in the self-session list.
 - pi allocates a worker session ID and carries the bridging-run guard; its memory
   agent disables extensions and session persistence.
-- Hermes's explicit CLI worker sets `MEMU_BRIDGING_RUN=1` and uses the existing
-  CLI-driven bridging pipeline. The SOUL.md installation does not register the
-  former plugin's session-identity or automatic worker callbacks.
+- Hermes's CLI worker sets `MEMU_BRIDGING_RUN=1`, clears the originating user's
+  session ID, and records the real child session ID from CLI startup/stream-json
+  output. Both successful and failed workers with reported identities are excluded
+  from later scans. The end hook ignores registered worker sessions; whole-pass
+  admission prevents concurrent workers.
 
 ### Installation and verification
 
@@ -100,6 +102,12 @@ CLI commands rather than importing Hermes's Python modules, and has no
 plugin-specific minimum version gate. Instruction refresh preserves the local
 on-demand policy. Start a fresh session to load the instruction; readback alone
 does not establish that an existing session has loaded it.
+
+Hermes also configures an `on_session_end` shell hook through the CLI and grants
+only its exact event/command allowlist approval. The hook launches a detached
+worker without waiting for memory processing. Unrelated hooks and consent entries
+are preserved. The replacement hook is configured before old automatic entries
+are removed; actual processing remains guarded by the shared lock and cooldown.
 
 Installation and removal verify legacy Windows schedule cleanup. An owned legacy
 `memu-memory` plugin is removed through Hermes's CLI and checked for directory
@@ -124,9 +132,9 @@ display. Autonomous retrieval coverage depends on the model; a successful query
 in a focused probe does not establish reliable discovery in everyday conversation.
 The service remains embedding-only and the main agent supplies the query.
 
-Explicit memorization commands remain available, but SOUL.md installation does
-not schedule automatic processing. Linux/macOS legacy schedules and Hermes native
-cron still require separate inspection and verified removal. Revisit automatic
+Automatic memorization uses the shell hook plus shared prepare/agent/commit
+pipeline; explicit commands remain available. Linux/macOS legacy schedules and
+Hermes native cron still require separate inspection and verified removal. Revisit automatic
 retrieval hooks after upstream context delivery supports the intended experience.
 
 ## References

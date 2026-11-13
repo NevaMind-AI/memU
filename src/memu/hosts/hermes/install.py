@@ -6,6 +6,7 @@ import argparse
 import platform
 import shutil
 from dataclasses import replace
+from pathlib import Path
 from typing import Any
 
 from memu.hosts import installation as lifecycle
@@ -41,6 +42,8 @@ async def _stage(stage: int, args: argparse.Namespace) -> None:
         with workspace_lock(lock) as acquired:
             if not acquired:
                 raise lifecycle.Blocked("Another Hermes installation update is running; retry later.")  # noqa: TRY003
+            # Verify the replacement trigger before removing old automatic entries.
+            hook_install.configure_memorize(Path(args.base_dir))
             if platform.system() == "Windows" and await _command([
                 "schedule",
                 "uninstall",
@@ -65,6 +68,7 @@ async def run(args: argparse.Namespace) -> int:
         welcome="\nWelcome to memU · Hermes",
         completion={
             "instruction_verification": "soul_managed_block_readback",
+            "memorize_hook": "on_session_end_shell_hook",
             "instruction_path": str(hermes_home() / "SOUL.md"),
             "restart_required": True,
             "notice": "Start a fresh Hermes session to load SOUL.md. Restart running Hermes processes after legacy plugin removal. Non-Windows and Hermes native cron schedules require separate cleanup.",

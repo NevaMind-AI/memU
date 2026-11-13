@@ -725,7 +725,7 @@ async def _cmd_hook_run(spec: HostSpec, args: argparse.Namespace) -> int:
         elif spec.host == "pi":
             from memu.hosts.pi.memorize_hook import memorize_run
         elif spec.host == "hermes":
-            from memu.hosts.hooks.admission import memorize_run
+            from memu.hosts.hermes.memorize_hook import memorize_run
         else:
             from memu.hosts.claude_code.memorize_hook import memorize_run
 

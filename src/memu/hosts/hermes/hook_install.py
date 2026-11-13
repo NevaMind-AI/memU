@@ -7,6 +7,7 @@ import contextlib
 import json
 import os
 import platform
+import shlex
 import shutil
 import subprocess
 import sys
@@ -14,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from memu.hosts import instruction
+from memu.hosts.bridging.recall_files import _atomic_write_text
 from memu.hosts.hermes.sessions import hermes_home
 from memu.hosts.hooks.admission import workspace_lock
 
@@ -64,6 +66,68 @@ def command(*argv: str) -> str:
     return result.stdout
 
 
+def _owned_hook(entry: Any) -> bool:
+    if not isinstance(entry, dict) or not isinstance(entry.get("command"), str):
+        return False
+    try:
+        argv = shlex.split(entry["command"])
+    except ValueError:
+        return False
+    offset = 2 if argv[1:2] == ["-I"] else 1
+    return argv[offset : offset + 3] == ["-m", "memu.hosts.hermes.cli", "memorize-hook"]
+
+
+def configure_memorize(base: Path | None) -> None:
+    """Patch only our shell-hook entries; preserve unrelated hooks and consent."""
+    hooks = json.loads(command("config", "get", "hooks", "--json"))
+    if not isinstance(hooks, dict):
+        raise TypeError("Hermes hooks configuration is not an object")  # noqa: TRY003
+    entries = hooks.get("on_session_end", [])
+    if not isinstance(entries, list):
+        raise TypeError("Hermes on_session_end hooks must be a list")  # noqa: TRY003
+
+    previous = [entry["command"] for entry in entries if _owned_hook(entry)]
+    kept = [entry for entry in entries if not _owned_hook(entry)]
+    hook_command = None
+    if base is not None:
+        hook_command = shlex.join([
+            str(Path(sys.executable)).replace("\\", "/"),
+            "-I",
+            "-m",
+            "memu.hosts.hermes.cli",
+            "memorize-hook",
+            "--base-dir",
+            str(base.expanduser().resolve()).replace("\\", "/"),
+        ])
+        kept.append({"command": hook_command, "timeout": 10})
+    if kept:
+        hooks["on_session_end"] = kept
+    else:
+        hooks.pop("on_session_end", None)
+    if kept:
+        command("config", "set", "hooks.on_session_end", json.dumps(kept))
+    else:
+        command("config", "unset", "hooks.on_session_end")
+    if json.loads(command("config", "get", "hooks", "--json")) != hooks:
+        raise RuntimeError("Hermes shell hook configuration readback failed")  # noqa: TRY003
+    allowlist = home() / "shell-hooks-allowlist.json"
+    consent = json.loads(allowlist.read_text(encoding="utf-8")) if allowlist.exists() else {}
+    approvals = consent.get("approvals", [])
+    if not isinstance(approvals, list):
+        raise TypeError("Hermes shell hook approvals must be a list")  # noqa: TRY003
+    approvals = [
+        item
+        for item in approvals
+        if not (isinstance(item, dict) and item.get("event") == "on_session_end" and item.get("command") in previous)
+    ]
+    if hook_command:
+        approvals.append({"event": "on_session_end", "command": hook_command})
+    consent["approvals"] = approvals
+    _atomic_write_text(allowlist, json.dumps(consent, indent=2) + "\n")
+    if hook_command and hook_command not in command("hooks", "list"):
+        raise RuntimeError("Hermes did not recognize the installed memorize shell hook")  # noqa: TRY003
+
+
 def remove_legacy_plugin() -> int:
     destination = target()
     if not destination.exists():
@@ -102,6 +166,7 @@ async def remove(args: argparse.Namespace) -> int:
                 code = await _command(["schedule", "uninstall", "--base-dir", str(args.base_dir)])
             if code:
                 return 1
+        configure_memorize(None)
         removed = remove_legacy_plugin()
         instruction.remove(home() / "SOUL.md", "memu-hermes")
         instruction.remove_skill(home() / "skills")

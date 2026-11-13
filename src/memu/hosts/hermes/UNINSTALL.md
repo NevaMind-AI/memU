@@ -8,7 +8,8 @@ memu-hermes uninstall
 ```
 
 Use the same `HERMES_HOME` as the installed Hermes profile. Uninstall removes
-memU's managed SOUL.md block and legacy `memu-retrieve` skill. Other SOUL.md
+memU's managed SOUL.md block, memorize shell-hook entry and its exact allowlist
+approval, and legacy `memu-retrieve` skill. Other SOUL.md
 content, sessions, shared memory, working files, and unrelated settings are kept.
 Repeating uninstall is safe.
 

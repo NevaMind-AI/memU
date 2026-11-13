@@ -45,6 +45,9 @@ def _register_extra(sub: Any) -> None:
     # instructions live entirely in the managed SOUL.md block.
     sub.choices["install-instruction"].description = "Install on-demand memU retrieval inline in SOUL.md"
     sub.choices["remove-instruction"].set_defaults(skills_dir=str(hermes_home() / "skills"))
+    from memu.hosts.hermes import memorize_hook
+
+    memorize_hook.register(sub)
     install.register(sub)
     hook_install.register(sub)
 
@@ -63,7 +66,7 @@ SPEC = HostSpec(
     schedule_prepare_session_dir=True,
     session_id_env=SESSION_ID_ENV,
     hook=hooks.HookSpec(
-        agent=hooks.HeadlessAgent(argv=("hermes", "--ignore-rules")),
+        agent=hooks.HeadlessAgent(argv=("hermes", "chat", "--ignore-rules")),
         stream_output=hook.stream_agent,
     ),
     register_extra=_register_extra,

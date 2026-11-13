@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import json
 import shutil
+from typing import Any
 
 import pytest
 
@@ -48,7 +49,19 @@ def machine(tmp_path, monkeypatch):
             return 0
         return await dispatch(argv)
 
+    hook_config: dict[str, Any] = {}
+
     def hermes_command(*argv):
+        if argv == ("config", "get", "hooks", "--json"):
+            return json.dumps(hook_config)
+        if argv[:3] == ("config", "set", "hooks.on_session_end"):
+            hook_config["on_session_end"] = json.loads(argv[3])
+            return ""
+        if argv == ("config", "unset", "hooks.on_session_end"):
+            hook_config.pop("on_session_end", None)
+            return ""
+        if argv == ("hooks", "list"):
+            return "\n".join(entry["command"] for entry in hook_config.get("on_session_end", []))
         calls.append(list(argv))
         assert argv == ("plugins", "remove", hook_install.NAME)
         shutil.rmtree(hook_install.target())
@@ -164,6 +177,23 @@ def test_missing_hermes_stops_install(machine, monkeypatch, capsys):
     assert main(["install", "--non-interactive", "--json", "--base-dir", str(base)]) == 2
     assert json.loads(capsys.readouterr().out.splitlines()[-1])["complete"] is False
     assert not (home / "SOUL.md").exists()
+
+
+def test_unrecognized_shell_hook_stops_legacy_migration(machine, monkeypatch, capsys):
+    home, base, calls = machine
+    path = legacy_plugin(home)
+    original = hook_install.command
+
+    def command(*argv):
+        return "No shell hooks" if argv == ("hooks", "list") else original(*argv)
+
+    monkeypatch.setattr(hook_install, "command", command)
+    assert main(["install", "--non-interactive", "--json", "--base-dir", str(base)]) == 1
+    assert path.exists()
+    assert not (home / "SOUL.md").exists()
+    assert ["plugins", "remove", hook_install.NAME] not in calls
+    assert not any(call[0] == "schedule" for call in calls)
+    assert json.loads(capsys.readouterr().out.splitlines()[-1])["complete"] is False
 
 
 def test_readback_must_match(machine, monkeypatch):
