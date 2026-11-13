@@ -46,8 +46,8 @@ def test_automatic_query_fallback_uses_first_2000_unicode_characters(tmp_path, m
     assert calls[0][1]["input"] == prompt[:2000].encode("utf-8")
     assert event["prompt"] == prompt
     assert source.getvalue() == original
-    log = next((tmp_path / "log/hooks/retrieve").glob("*.log"))
-    final = json.loads(log.read_text(encoding="utf-8").splitlines()[-1])
+    log = next((tmp_path / "log/hooks/retrieve").glob("*.json"))
+    final = json.loads(log.read_text(encoding="utf-8"))
     assert final["prompt_chars"] == length
     assert final["query_chars"] == min(length, 2000)
     assert final["query_truncated"] is (length > 2000)
@@ -67,7 +67,7 @@ def test_truncated_whitespace_query_does_not_call_backend(tmp_path, monkeypatch,
     assert main(["prompt-hook", "--base-dir", str(tmp_path)]) == 0
     assert not calls
     assert not capsys.readouterr().out
-    final = json.loads(next((tmp_path / "log/hooks/retrieve").glob("*.log")).read_text().splitlines()[-1])
+    final = json.loads(next((tmp_path / "log/hooks/retrieve").glob("*.json")).read_text(encoding="utf-8"))
     assert final["status"] == "empty_query"
 
 

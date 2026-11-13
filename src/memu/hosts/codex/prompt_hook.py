@@ -11,9 +11,9 @@ import sys
 import time
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from memu.env import LONG_QUERY_CHARS
-from memu.hosts.codex.notify_console import _new_log_path
 from memu.hosts.codex.query_extraction import select_query
 from memu.hosts.retrieval import render_context
 
@@ -25,9 +25,9 @@ async def _cmd_prompt_hook(args: argparse.Namespace) -> int:
     trace: dict[str, Any] = {"hook": "UserPromptSubmit", "pid": os.getpid(), "status": "started"}
     try:
         base = Path(args.base_dir).expanduser() if args.base_dir is not None else Path.home() / ".memu/hosts/codex"
-        log_path = _new_log_path(base, "retrieve")
-        with log_path.open("a", encoding="utf-8") as log:
-            print(json.dumps(trace), file=log, flush=True)
+        directory = base / "log/hooks/retrieve"
+        directory.mkdir(parents=True, exist_ok=True)
+        with (directory / f"{uuid4()}.json").open("x", encoding="utf-8") as log:
             try:
                 _retrieve(trace)
             except subprocess.TimeoutExpired:
@@ -38,7 +38,7 @@ async def _cmd_prompt_hook(args: argparse.Namespace) -> int:
                 print(f"memU prompt hook failed: {exc}", file=sys.stderr)
             finally:
                 trace["elapsed_ms"] = round((time.monotonic() - started) * 1000)
-                print(json.dumps(trace, ensure_ascii=False), file=log, flush=True)
+                print(json.dumps(trace, ensure_ascii=False, indent=2), file=log, flush=True)
     except OSError as exc:
         print(f"memU prompt hook log failed: {exc}", file=sys.stderr)
     return 0
