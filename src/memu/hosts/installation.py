@@ -231,17 +231,10 @@ def add_arguments(parser: argparse.ArgumentParser, host: str, *, install_missing
 
 
 def check_cleanup(home: Path, binary: str, instruction_name: str) -> None:
-    skill = home / "skills/memu-retrieve/SKILL.md"
-    if skill.exists() or skill.is_symlink():
-        if (
-            not skill.is_file()
-            or skill.parent.is_symlink()
-            or skill.is_symlink()
-            or set(skill.parent.iterdir()) != {skill}
-        ):
-            raise Blocked("旧检索 skill 含额外文件或链接，请由 Agent 确认归属后定向清理。")
-        if skill.read_text(encoding="utf-8") != instruction.skill_document(binary):
-            raise Blocked("旧检索 skill 与内置版本不同，请由 Agent 检查编辑和归属后定向清理。")
+    try:
+        instruction.check_skill_cleanup(home / "skills", binary)
+    except ValueError as exc:
+        raise Blocked(str(exc)) from exc
     agents = home / instruction_name
     if agents.exists() or agents.is_symlink():
         if agents.is_symlink():
