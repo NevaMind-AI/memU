@@ -21,3 +21,4 @@
 - [0019: Allocate a Private Workspace for Each Developer Memorize Run](0019-developer-run-workspaces.md)
 - [0020: Self-Contained Host Retrieval Hits](0020-self-contained-host-retrieval-hits.md)
 - [0021: pi Extension Hooks for Retrieval and Memorization](0021-pi-extension-hooks.md)
+- [0022: Shared Host Hooks for Retrieval and Memorization](0022-host-memory-hooks.md)

@@ -1459,6 +1459,37 @@ def test_hermes_native_windows_default_uses_local_appdata(
     assert state_db_path() == tmp_path / "hermes" / "state.db"
 
 
+@pytest.mark.parametrize("platform", ["win32", "linux"])
+def test_hermes_home_falls_back_to_platform_default(monkeypatch, tmp_path, platform):
+    from memu.hosts.hermes.sessions import hermes_home
+
+    monkeypatch.delenv("HERMES_HOME", raising=False)
+    monkeypatch.delenv("LOCALAPPDATA", raising=False)
+    monkeypatch.setattr("memu.hosts.hermes.sessions.sys.platform", platform)
+    monkeypatch.setattr(pathlib.Path, "home", lambda: tmp_path)
+    expected = tmp_path / "AppData/Local/hermes" if platform == "win32" else tmp_path / ".hermes"
+    assert hermes_home() == expected
+    assert state_db_path() == expected / "state.db"
+
+
+@pytest.mark.parametrize("user_position", ["none", "before", "after"])
+def test_hermes_excludes_async_context_and_preserves_merged_user_text(tmp_path, user_position):
+    source = HermesTranscriptSource(tmp_path / "state.db")
+    token = "a" * 32
+    delivery = f"<!-- memu-hermes-retrieval:{token} -->\nold memory\n<!-- /memu-hermes-retrieval:{token} -->"
+    parts = {"none": [delivery], "before": ["new user input", delivery], "after": [delivery, "new user input"]}
+    row = {"role": "user", "content": "\n\n".join(parts[user_position]), "timestamp": 123, "future_field": "keep"}
+    record = json.dumps(row)
+    if user_position == "none":
+        assert source.classify(record) == RecordKind.OTHER
+    else:
+        assert source.classify(record) == RecordKind.MESSAGE
+        assert json.loads(source.sanitize(tmp_path / "session", record)) == {**row, "content": "new user input"}
+    assistant = json.dumps({**row, "role": "assistant"})
+    assert source.classify(assistant) == RecordKind.MESSAGE
+    assert source.sanitize(tmp_path / "session", assistant) == assistant
+
+
 def test_hermes_discovers_sessions_most_recent_first(tmp_path: pathlib.Path) -> None:
     source = HermesTranscriptSource(_hermes_db(tmp_path))
     assert source.exists()

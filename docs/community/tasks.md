@@ -116,6 +116,25 @@ Claude Code 已接入自动检索和后台记忆 hook，但旧版安装可能仍
 - 读取 plist 的 label、程序参数和所属 launchd domain，确认登记是否属于 Claude Code 的 memU bridge。
 - 在真实 macOS 环境验证正确 domain 下的卸载与配置移除；权限不足时给出准确诊断。
 
+### 待验证的现有 CLI 缺口
+
+`memu-claude-code schedule uninstall` 当前委托旧的共享 Windows helper。
+模拟注销报错时仍返回成功，并删除本地 wrapper、prompt 和注册记录；
+检查流程也会把查询失败视作任务不存在。需要改为明确失败，保留重试所需文件，
+核对任务动作归属，并在删除后验证不存在。
+PR #802 的 Hermes Windows 清理提供独立的已验证路径；Claude Code 接入该路径，
+并验证自己的历史注册，属于本任务范围。Linux/macOS 的检查与移除仍按平台分别推进。
+
+当前验收状态仅针对旧调度注册的 CLI 检查、移除与读回验证：
+
+| Host | Windows | Linux | macOS |
+| --- | --- | --- | --- |
+| Claude Code | 已复现上述缺陷，尚未修复并通过验收 | 未验收 | 未验收 |
+| Hermes | 已验收 Windows Task Scheduler 清理，包括历史注册、归属核对、删除读回和失败传播 | 未验收 | 未验收 |
+
+Hermes native cron 的自动迁移清理也尚未验收，不属于 Windows Task Scheduler
+的已验收范围。Hermes 的记录仅作对照，不扩展本任务的 Claude Code 实现范围。
+
 ### 每个平台的验收标准
 
 - 提供可执行的检查与定向移除命令，优先沿用现有 `memu-claude-code schedule` 接缝，具体命令形式可在认领时讨论。

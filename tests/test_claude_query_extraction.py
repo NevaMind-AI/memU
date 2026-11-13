@@ -66,7 +66,10 @@ def test_claude_request_and_validation(value, monkeypatch):
 
     monkeypatch.setattr(query_extraction, "run_extraction", run)
     trace: dict[str, Any] = {}
-    assert claude.select_query("x" * 600, trace) == ("topic" if value == {"result": '{"query":"topic"}'} else "x" * 600)
+    expected = "x" * 600
+    if value in ({"result": '{"query":"topic"}'}, {"result": '{"query":"' + "x" * 201 + '"}'}):
+        expected = json.loads(value["result"])["query"]
+    assert claude.select_query("x" * 600, trace) == expected
 
 
 def test_claude_hook_uses_extracted_query_and_remaining_deadline(monkeypatch):

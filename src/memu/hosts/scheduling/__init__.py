@@ -13,6 +13,6 @@ Nothing here touches the cron or launchd code paths.
 
 from __future__ import annotations
 
-from memu.hosts.scheduling.windows import install, status, uninstall, verify
+from memu.hosts.scheduling.windows import cleanup, install, status, uninstall, verify
 
-__all__ = ["install", "status", "uninstall", "verify"]
+__all__ = ["cleanup", "install", "status", "uninstall", "verify"]
