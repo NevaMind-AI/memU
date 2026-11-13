@@ -55,8 +55,10 @@ memu-hermes install-instruction
 memu-hermes remove-instruction
 ```
 
-Default-path instruction installation removes a legacy `memu-retrieve` skill
-after writing the inline procedure. `--path` can target a separate SOUL.md
+Default-path instruction installation removes a verified packaged legacy
+`memu-retrieve` skill after writing the inline procedure. Edited skills, extra
+files, or linked paths are preserved and require ownership review; full install
+and uninstall check this before changing lifecycle integration. `--path` can target a separate SOUL.md
 without cleaning another profile's skills. Full `install` also handles legacy
 plugin and schedule migration; `install-instruction` only patches instructions.
 
