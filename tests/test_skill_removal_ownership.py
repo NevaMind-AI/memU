@@ -215,7 +215,6 @@ def test_windows_directory_junctions_preserve_external_skill_and_instructions(
     result = subprocess.run(  # noqa: S603 -- both paths are isolated pytest temporary fixtures
         [str(Path(os.environ["SYSTEMROOT"]) / "System32/cmd.exe"), "/c", "mklink", "/J", str(link), str(target)],
         capture_output=True,
-        text=True,
         check=False,
         timeout=10,
     )
