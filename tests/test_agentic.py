@@ -614,3 +614,29 @@ async def test_nameless_mirror_preserves_uncommitted_state_and_can_be_retried(
     assert not pending.exists()
     assert list(jobs.iterdir()) == []
     assert list(inputs.iterdir()) == []
+
+
+@pytest.mark.parametrize("track", ["memory", "skill"])
+@pytest.mark.parametrize(
+    ("name", "description"),
+    [("markdown---", "formatting rules"), ("markdown", "The thematic break marker is ---")],
+)
+async def test_memorize_body_edit_preserves_metadata_ending_in_dashes(
+    service: MemoryService, tmp_path: Any, track: str, name: str, description: str
+) -> None:
+    original = {"name": name, "track": track, "description": description, "content": "Original body"}
+    seeded = await service.commit_results(recall_files=[original])
+    original_id = seeded["recall_files"][0]["id"]
+    workspace = lifecycle.MemorizeWorkspace(tmp_path / "workspace")
+    session = MemorizeInput(items=[MessageInput(role="user", content="Remember Markdown formatting")])
+    await lifecycle.prepare_memorize(session, workspace, service, verify_command="memu verify")
+
+    mirror = getattr(workspace, track) / f"{name}.md"
+    updated_body = "Updated body\n---\nAnother section"
+    mirror.write_text(mirror.read_text(encoding="utf-8").replace("Original body", updated_body), encoding="utf-8")
+    await lifecycle.commit_memorize(workspace, service)
+
+    stored = (await service.list_all_recall_files())["recall_files"]
+    assert len(stored) == 1
+    assert stored[0]["id"] == original_id
+    assert {key: stored[0][key] for key in original} == {**original, "content": updated_body}
