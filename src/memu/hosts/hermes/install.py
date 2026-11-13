@@ -33,6 +33,7 @@ async def _stage(stage: int, args: argparse.Namespace) -> None:
         if not executable:
             raise lifecycle.Blocked("Hermes was not found on PATH; open a terminal where hermes is available.")  # noqa: TRY003
         hook_install.target()
+        instruction.check_skill_cleanup(hermes_home() / "skills", "memu-hermes")
         print(f"   Hermes: {executable}")
     elif stage == 2:
         await lifecycle.backend(args, _command)

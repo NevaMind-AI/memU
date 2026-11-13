@@ -123,7 +123,7 @@ def test_migrate_legacy_plugin_and_skill(machine, capsys, operation):
     path = legacy_plugin(home)
     skill = instruction.skill_path(home / "skills")
     skill.parent.mkdir(parents=True)
-    skill.write_text("Legacy skill", encoding="utf-8")
+    skill.write_text(instruction.skill_document("memu-hermes"), encoding="utf-8")
     argv = [operation, "--json", "--base-dir", str(base)]
     if operation == "install":
         argv += ["--non-interactive"]

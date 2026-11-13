@@ -159,6 +159,7 @@ async def remove(args: argparse.Namespace) -> int:
         if not acquired:
             print("Another Hermes installation update is running", file=sys.stderr)
             return 2
+        instruction.check_skill_cleanup(home() / "skills", "memu-hermes")
         if platform.system() == "Windows":
             from memu.hosts.hermes.install import _command
 
@@ -169,7 +170,7 @@ async def remove(args: argparse.Namespace) -> int:
         configure_memorize(None)
         removed = remove_legacy_plugin()
         instruction.remove(home() / "SOUL.md", "memu-hermes")
-        instruction.remove_skill(home() / "skills")
+        instruction.remove_skill(home() / "skills", "memu-hermes")
     notice = (
         "Start a fresh Hermes session to refresh SOUL.md; restart running Hermes processes after legacy plugin removal."
     )

@@ -167,7 +167,7 @@ def test_install_uninstall_preserves_third_party_settings_and_processing(machine
     assert not (home.parent / "redirected-claude").exists()
 
 
-@pytest.mark.parametrize("condition", ["auth", "missing-cli", "disabled", "invalid", "edited-skill"])
+@pytest.mark.parametrize("condition", ["auth", "missing-cli", "disabled", "invalid", "edited-skill", "extra-file"])
 def test_install_stops_on_blockers_without_mutating_hooks(machine, monkeypatch, capsys, condition):
     home, _, _ = machine
     path = home / "settings.json"
@@ -183,14 +183,41 @@ def test_install_stops_on_blockers_without_mutating_hooks(machine, monkeypatch, 
             raise FileNotFoundError("Standalone Claude CLI unavailable")  # noqa: TRY003
 
         monkeypatch.setattr(cli_prepare, "prepare", missing)
-    if condition == "edited-skill":
+    if condition in {"edited-skill", "extra-file"}:
+        from memu.hosts import instruction
+
         skill = home / "skills/memu-retrieve/SKILL.md"
         skill.parent.mkdir(parents=True)
-        skill.write_text("user content")
+        skill.write_text(
+            "user content" if condition == "edited-skill" else instruction.skill_document("memu-claude-code"),
+            encoding="utf-8",
+        )
+        if condition == "extra-file":
+            (skill.parent / "notes.txt").write_text("User notes.\n", encoding="utf-8")
     original = path.read_bytes()
     assert invoke(machine) in (1, 2)
     assert path.read_bytes() == original
     assert json.loads(capsys.readouterr().out.splitlines()[-1])["complete"] is False
+
+
+async def test_final_migration_stage_removes_only_owned_legacy_entries(machine, monkeypatch):
+    from memu.hosts import host_cli, instruction
+
+    home = machine[0]
+    skill = home / "skills/memu-retrieve/SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text(instruction.skill_document("memu-claude-code"), encoding="utf-8")
+    rules = home / "CLAUDE.md"
+    rules.write_text("User rules.\n\n" + instruction.block("memu-claude-code", skill=True), encoding="utf-8")
+
+    async def command(argv):
+        args = host_cli.build_parser(SPEC).parse_args(argv)
+        return await args.handler(args)
+
+    monkeypatch.setattr(install, "_command", command)
+    await install._stage(5, argparse.Namespace())
+    assert rules.read_text(encoding="utf-8") == "User rules.\n"
+    assert not skill.parent.exists()
 
 
 @pytest.mark.parametrize("error,code", [(EOFError(), 2), (KeyboardInterrupt(), 130)])

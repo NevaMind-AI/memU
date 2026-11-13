@@ -7,6 +7,7 @@ network is involved. This is the service's whole public surface.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -14,6 +15,9 @@ import pytest
 from memu.app import MemoryService
 from memu.app.memorize import lifecycle
 from memu.app.memorize.input import MemorizeInput, MessageInput
+from memu.hosts.base import RecordKind, TranscriptSource
+from memu.hosts.bridging import Layout, pipeline
+from memu.hosts.bridging.manifest import diff_tracked
 
 
 class FakeEmbeddingClient:
@@ -488,3 +492,151 @@ async def test_normalization_does_not_migrate_legacy_record(service: MemoryServi
         legacy_name,
         "personal-memory",
     }
+
+
+@pytest.mark.parametrize("invalid", [{}, {"name": None}, {"name": ""}, {"name": " \t\n"}])
+async def test_empty_name_rejects_entire_commit_before_embedding_or_writes(
+    service: MemoryService, invalid: dict[str, Any]
+) -> None:
+    counter = CountingEmbeddingClient()
+    service._embedding_pool._cache["embedding"] = counter
+    with pytest.raises(ValueError, match=r"recall-file name.*empty"):
+        await service.commit_results(
+            recall_files=[{"name": "valid", "content": "notes"}, {**invalid, "content": "must not disappear"}],
+            resource=[{"path": "/notes", "description": "notes"}],
+        )
+    assert counter.calls == 0
+    assert (await service.list_all_recall_files())["recall_files"] == []
+    assert service._get_database().resource_repo.list_resources() == {}
+
+
+class _LocalTranscriptSource(TranscriptSource):
+    name = "fixture"
+
+    def __init__(self, directory: Path) -> None:
+        self.directory = directory
+
+    def root(self) -> Path:
+        return self.directory
+
+    def classify(self, record: str) -> RecordKind:
+        return RecordKind.MESSAGE
+
+
+@pytest.mark.parametrize("entry_point", ["bridge", "developer"])
+@pytest.mark.parametrize("track", ["memory", "skill"])
+@pytest.mark.parametrize("name_line", ["", "name:   \t\n"])
+async def test_nameless_mirror_preserves_uncommitted_state_and_can_be_retried(
+    service: MemoryService,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    entry_point: str,
+    track: str,
+    name_line: str,
+) -> None:
+    """Both commit entry points keep failed work retryable against the real stores."""
+    monkeypatch.setattr(pipeline.templates, "resolve", lambda _name, embedded: embedded)
+    monkeypatch.setattr(lifecycle.templates, "resolve", lambda _name, embedded: embedded)
+    original = (
+        await service.commit_results(
+            recall_files=[
+                {
+                    "name": "notes",
+                    "track": track,
+                    "description": "existing notes",
+                    "content": "old body",
+                }
+            ]
+        )
+    )["recall_files"][0]
+    if entry_point == "bridge":
+        layout = Layout(base=tmp_path / "mirror", host="fixture")
+        logs = tmp_path / "logs"
+        logs.mkdir()
+        (logs / "1.jsonl").write_text('{"role":"user","content":"fixture"}\n', encoding="utf-8")
+        monkeypatch.setattr(pipeline, "build_agentic_memory_backend_from_env", lambda: service)
+        await pipeline.prepare(_LocalTranscriptSource(logs), layout, verify_command="memu verify")
+        manifest = layout.memory_manifest
+        pending = layout.session_manifest_pending
+        pending_before = pending.read_bytes()
+        layout.session_manifest.write_text("{}", encoding="utf-8")
+        session_before = layout.session_manifest.read_bytes()
+        jobs, inputs = layout.jobs, layout.sessions
+    else:
+        workspace = lifecycle.MemorizeWorkspace(tmp_path / "mirror")
+        await lifecycle.prepare_memorize(
+            MemorizeInput(items=[MessageInput(role="user", content="fixture")]),
+            workspace,
+            service,
+            verify_command="memu verify",
+        )
+        manifest = workspace.manifest
+        pending = workspace.active_run
+        pending_before = pending.read_bytes()
+        jobs, inputs = workspace.jobs, workspace.input
+
+    base = manifest.parent
+    changed = base / track / "notes.md"
+    changed.write_text(f"---\n{name_line}description: existing notes\n---\nnew body\n", encoding="utf-8")
+    valid = base / track / "aaa.md"
+    valid.write_text("---\nname: aaa\n---\nnew valid file\n", encoding="utf-8")
+    resources = base / "resources.md"
+    resources.write_text("---\npath: /new-resource\ndescription: fixture\n---\n", encoding="utf-8")
+    snapshot_before = manifest.read_bytes()
+    jobs_before = {path.name: path.read_bytes() for path in jobs.iterdir()}
+    inputs_before = {path.name: path.read_bytes() for path in inputs.iterdir()}
+
+    async def commit() -> dict[str, Any]:
+        if entry_point == "bridge":
+            return await pipeline.commit(layout)
+        return await lifecycle.commit_memorize(workspace, service)
+
+    with pytest.raises(ValueError, match=r"notes\.md.*name"):
+        await commit()
+    assert manifest.read_bytes() == snapshot_before
+    assert pending.read_bytes() == pending_before
+    if entry_point == "bridge":
+        assert layout.session_manifest.read_bytes() == session_before
+    assert {path.name: path.read_bytes() for path in jobs.iterdir()} == jobs_before
+    assert {path.name: path.read_bytes() for path in inputs.iterdir()} == inputs_before
+    assert diff_tracked(base, ["memory", "skill"], manifest) == [valid, changed]
+    assert (await service.list_all_recall_files())["recall_files"] == [original]
+    assert service._get_database().resource_repo.list_resources() == {}
+
+    changed.write_text("---\nname: notes\ndescription: existing notes\n---\nnew body\n", encoding="utf-8")
+    result = await commit()
+    updated = next(record for record in result["recall_files"] if record["name"] == "notes")
+    assert updated["id"] == original["id"]
+    assert updated["content"] == "new body"
+    assert len(result["recall_files"]) == 2
+    assert len(result["resources"]) == 1
+    assert diff_tracked(base, ["memory", "skill"], manifest) == []
+    assert not pending.exists()
+    assert list(jobs.iterdir()) == []
+    assert list(inputs.iterdir()) == []
+
+
+@pytest.mark.parametrize("track", ["memory", "skill"])
+@pytest.mark.parametrize(
+    ("name", "description"),
+    [("markdown---", "formatting rules"), ("markdown", "The thematic break marker is ---")],
+)
+async def test_memorize_body_edit_preserves_metadata_ending_in_dashes(
+    service: MemoryService, tmp_path: Any, track: str, name: str, description: str
+) -> None:
+    original = {"name": name, "track": track, "description": description, "content": "Original body"}
+    seeded = await service.commit_results(recall_files=[original])
+    original_id = seeded["recall_files"][0]["id"]
+    workspace = lifecycle.MemorizeWorkspace(tmp_path / "workspace")
+    session = MemorizeInput(items=[MessageInput(role="user", content="Remember Markdown formatting")])
+    await lifecycle.prepare_memorize(session, workspace, service, verify_command="memu verify")
+
+    mirror = getattr(workspace, track) / f"{name}.md"
+    updated_body = "Updated body\n---\nAnother section"
+    mirror.write_text(mirror.read_text(encoding="utf-8").replace("Original body", updated_body), encoding="utf-8")
+    await lifecycle.commit_memorize(workspace, service)
+
+    stored = (await service.list_all_recall_files())["recall_files"]
+    assert len(stored) == 1
+    assert stored[0]["id"] == original_id
+    assert {key: stored[0][key] for key in original} == {**original, "content": updated_body}

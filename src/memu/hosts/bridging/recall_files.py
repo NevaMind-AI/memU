@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -70,14 +71,17 @@ def read_recall_file(path: Path, track: str) -> dict[str, Any]:
     Recovers name/description from the frontmatter and content from the body,
     tagging it with the ``track`` its directory represents (the file itself does
     not store the track). Mirrors the fields ``list_all_recall_files`` returns.
+    Frontmatter delimiters occupy standalone ``---`` lines; a name or description
+    ending in ``---`` remains metadata.
     """
     text = path.read_text(encoding="utf-8")
     name = ""
     description = ""
     content = text
     if text.startswith("---\n"):
-        # maxsplit=2 keeps any '---' lines inside the content intact.
-        _, frontmatter, content = text.split("---\n", 2)
+        # Delimiters occupy a whole line; metadata may itself end in '---'.
+        # maxsplit=2 keeps any delimiter lines inside the body intact.
+        _, frontmatter, content = re.split(r"^---\n", text, maxsplit=2, flags=re.MULTILINE)
         for line in frontmatter.splitlines():
             key, sep, value = line.partition(":")
             if not sep:
@@ -86,4 +90,7 @@ def read_recall_file(path: Path, track: str) -> dict[str, Any]:
                 name = value.strip()
             elif key.strip() == "description":
                 description = value.strip()
+    if not name:
+        msg = f"recall file {path.name!r} requires a non-empty name in frontmatter"
+        raise ValueError(msg)
     return {"name": name, "track": track, "description": description, "content": content}
