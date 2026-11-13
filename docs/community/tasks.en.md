@@ -127,6 +127,18 @@ The Hermes Windows cleanup in PR #802 provides a separate verified path; bringin
 Claude Code onto that path and verifying its historical registrations belongs to
 this task. Linux/macOS inspection and removal remain platform-specific subtasks.
 
+Current acceptance status covers only CLI inspection, removal, and readback of
+legacy schedule registrations:
+
+| Host | Windows | Linux | macOS |
+| --- | --- | --- | --- |
+| Claude Code | Defects reproduced as above; fixes and successful verification still pending | Not verified | Not verified |
+| Hermes | Windows Task Scheduler cleanup verified, including historical registrations, ownership checks, deletion readback, and failure propagation | Not verified | Not verified |
+
+Automatic migration cleanup of Hermes native cron jobs is also unverified and is
+outside the verified Windows Task Scheduler scope. Hermes is recorded here for
+comparison; it does not expand this task's Claude Code implementation scope.
+
 ### Acceptance Criteria for Each Platform
 
 - Provide runnable inspection and targeted removal commands, preferably using the existing `memu-claude-code schedule` integration. Discuss the exact command interface when claiming the task.
