@@ -37,7 +37,7 @@ class DoubaoEmbeddingBackend(EmbeddingBackend):
 
     def build_embedding_payload(self, *, inputs: list[str], embed_model: str) -> dict[str, Any]:
         """Build payload for standard text embeddings."""
-        return {"model": embed_model, "input": inputs, "encoding_format": "float"}
+        return {"model": embed_model, "inputs": inputs, "encoding_format": "float"}
 
     def parse_embedding_response(self, data: dict[str, Any]) -> list[list[float]]:
         """Parse embedding response."""
@@ -64,7 +64,7 @@ class DoubaoEmbeddingBackend(EmbeddingBackend):
         return {
             "model": embed_model,
             "encoding_format": encoding_format,
-            "input": [inp.to_dict() for inp in inputs],
+            "inputs": [inp.to_dict() for inp in inputs],
         }
 
     def parse_multimodal_embedding_response(self, data: dict[str, Any]) -> list[list[float]]:
