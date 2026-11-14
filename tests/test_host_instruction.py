@@ -408,6 +408,34 @@ def test_remove_restores_user_content_byte_for_byte(tmp_path: pathlib.Path) -> N
     assert path.read_text(encoding="utf-8") == original
 
 
+@pytest.mark.parametrize(
+    "original",
+    [
+        "User code:\n```text\na\n\n\nb\n```\n",
+        "\n\nUser rules.\n\n\n\n",
+        "User rules.\n   \n\t\n\n",
+        "\n\n\n",
+    ],
+)
+def test_remove_preserves_user_whitespace(tmp_path: pathlib.Path, original: str) -> None:
+    path = tmp_path / "AGENTS.md"
+    path.write_text(original, encoding="utf-8")
+    before = path.read_bytes()
+    instruction.install(path, BINARY)
+    instruction.remove(path, BINARY)
+    assert path.read_bytes() == before
+
+
+def test_strip_preserves_user_content_after_and_between_blocks() -> None:
+    prefix = "User code:\n```text\na\n\n\nb\n```\n"
+    middle = "\n\nMiddle.\n\n\n"
+    suffix = "\n\nTail.\n\n\n\n"
+    # Each managed block has the single separator newline added by patch.
+    current = prefix + "\n" + instruction.block(BINARY) + middle + "\n" + instruction.block(BINARY) + suffix
+    assert instruction.strip(current, BINARY) == prefix + middle + suffix
+    assert instruction.strip(suffix, BINARY) == suffix
+
+
 def test_remove_leaves_a_block_only_file_empty(tmp_path: pathlib.Path) -> None:
     path = tmp_path / "AGENTS.md"
     instruction.install(path, BINARY)  # install created the file: block only

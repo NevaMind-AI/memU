@@ -35,6 +35,30 @@ def test_recorded_server_skill_survives_package_changes(
     assert instruction.cleanup([rules], binary, skills_dir=skills) == []
 
 
+@pytest.mark.parametrize("newline", ["\n", "\r\n", "\r"])
+@pytest.mark.parametrize("refresh", [False, True])
+def test_template_line_endings_match_the_receipt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, newline: str, refresh: bool
+) -> None:
+    skills = tmp_path / "skills"
+    remote = f"Remote {{binary}} retrieve.{newline}Second line.{newline}"
+    if refresh:
+        instruction.install_skill(skills, "memu-openclaw")
+        monkeypatch.setattr(instruction.templates, "fetch", lambda _: remote)
+        instruction.refresh(tmp_path / "AGENTS.md", "memu-openclaw", skills_dir=skills)
+    else:
+        instruction.install_skill(skills, "memu-openclaw", skill_text=remote)
+    target = instruction.skill_path(skills)
+    installed = target.read_text(encoding="utf-8")
+    assert installed == "Remote memu-openclaw retrieve.\nSecond line.\n"
+    assert instruction.check_skill_cleanup(skills, "memu-openclaw")
+    target.write_text(installed + "User edit.\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="ownership record"):
+        instruction.remove_skill(skills, "memu-openclaw")
+    target.write_text(installed, encoding="utf-8")
+    assert instruction.remove_skill(skills, "memu-openclaw")[0]
+
+
 def test_refresh_updates_the_ownership_record(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     skills = tmp_path / "skills"
     instruction.install_skill(skills, "memu-codex")

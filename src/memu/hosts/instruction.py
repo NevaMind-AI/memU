@@ -225,14 +225,14 @@ def strip(current: str, binary: str) -> str:
     :func:`patch` added, so an install/remove round-trip restores the file
     byte-for-byte.
     """
-    pattern = _block_re(binary)
-    if not pattern.search(current):
-        return current
-    stripped = pattern.sub("", current)
-    stripped = re.sub(r"\n{3,}", "\n\n", stripped)
-    if not stripped.strip():
-        return ""
-    return stripped.rstrip("\n") + "\n"
+    for match in reversed(list(_block_re(binary).finditer(current))):
+        start = match.start()
+        # patch appends one separator newline after existing non-empty content.
+        # Remove only that adjacent separator, never normalize the user's text.
+        if current[max(0, start - 2) : start] == "\n\n":
+            start -= 1
+        current = current[:start] + current[match.end() :]
+    return current
 
 
 def _write(path: Path, updated: str, *, backup: bool, dry_run: bool) -> tuple[bool, str]:
@@ -323,7 +323,7 @@ def install_skill(
     receipt = target.with_name(".memu-owned.json")
     if receipt.is_symlink() or (receipt.exists() and not receipt.is_file()):
         raise ValueError(f"Retrieval skill ownership record is not a regular file: {receipt}")  # noqa: TRY003
-    document = skill_document(binary, skill_text=skill_text)
+    document = skill_document(binary, skill_text=skill_text).replace("\r\n", "\n").replace("\r", "\n")
     result = _write(target, document, backup=False, dry_run=dry_run)
     record = json.dumps({"binary": binary, "sha256": hashlib.sha256(document.encode("utf-8")).hexdigest()}) + "\n"
     _write(receipt, record, backup=False, dry_run=dry_run)
