@@ -156,18 +156,12 @@ Three rules that hold for every host:
   sees it as a suggested reply, and the exact phrase inside them is what they
   type back to you to start the uninstall flow.
 
-  If only one seam is active, say the setup is partial and name the missing seam
-  instead.
+  If only one seam is active, report a partial setup and name the missing seam.
 
 ## Uninstall
 
-For an existing Cola or generic integration, use its original `memu-cola` or
-`memu-agent` binary to print `docs uninstall`; these commands remain available
-for existing installations.
-
-For other hosts, if the user asked to **uninstall** memU:
-identify your binary as in Step 2, then print and follow its removal
-guide —
+If the user asked to **uninstall** memU, identify your binary as in Step 2,
+then print and follow its removal guide —
 
 ```
 <your-binary> docs uninstall

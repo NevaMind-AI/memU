@@ -193,8 +193,8 @@ class HostSpec:
     """Reserved for host-specific flags; unused today."""
 
     register_extra: Callable[[Any], None] | None = None
-    """Optional hook adding host-specific subcommands (the generic adapter's
-    ``detect``). Called with the subparsers object after the shared verbs."""
+    """Optional hook adding host-specific subcommands.
+    Called with the subparsers object after the shared verbs."""
 
     resolve_self_sessions: Callable[[TranscriptSource, Layout], list[str]] | None = None
     """Optional native-scheduler identity resolver.
@@ -941,8 +941,7 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
     )
 
     p = with_base(sub.add_parser("prepare", help=f"Slice new {spec.display} sessions into self-evolve job files"))
-    # A host with no universal session location (the generic adapter) leaves
-    # session_dir empty, which makes the flag mandatory instead of defaulted.
+    # An empty session_dir makes the flag mandatory instead of defaulted.
     p.add_argument(
         "--session-dir",
         default=spec.session_dir or None,

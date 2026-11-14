@@ -103,6 +103,25 @@ To run memU locally with your own storage and embedding provider, send this mess
 
 > Read [https://raw.githubusercontent.com/NevaMind-AI/MemU/main/SKILL.md](https://raw.githubusercontent.com/NevaMind-AI/MemU/main/SKILL.md) and follow it to install memU.
 
+## Upgrading from Cola or generic
+
+The Cola and generic adapters, including `memu-cola` and `memu-agent`, have been
+removed. **Before upgrading**, use the previous installation to print the guide
+for each integration you installed:
+
+```sh
+memu-cola docs uninstall
+memu-agent docs uninstall
+```
+
+Follow the applicable guide to disable and remove that integration's scheduled
+tasks and managed retrieval instructions/skills. Verify ownership before deleting
+files or scheduler entries, and preserve user-edited or unrelated content. Keep
+the shared memory store, `~/.memu/config.env`, and tooling needed by other hosts.
+Upgrading the package does not clean up integrations; leftover tasks and retrieval
+instructions will call commands that no longer exist. If already upgraded, restore
+your previous package version to complete cleanup first.
+
 ## Uninstall
 
 To uninstall memU, send this message to your agent:
