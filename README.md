@@ -206,6 +206,15 @@ path the host uses.
 | `sqlite` | `sqlite:///path.sqlite3` | brute-force cosine | local/default, single writer |
 | `postgres` | `postgresql://...` | pgvector | concurrent access, large stores (`pip install "memu-cli[postgres]"`) |
 
+On SQLite and inmemory, each `commit_results` call publishes resources, RecallFiles,
+and their searchable segments atomically; a storage failure rolls back the entire
+batch. Embedding requests run outside write ownership, and commits re-plan against
+current records before writing. Concurrent full-body updates use last-writer-wins
+semantics. Each listing or retrieval call reads a consistent snapshot; separate
+calls, including pagination requests, do not share a snapshot. See
+[Atomic local commits](docs/adr/0022-atomic-local-commits.md) for backend coverage
+and implementation tradeoffs.
+
 ```python
 service = MemoryService(
     database_config={"metadata_store": {"provider": "postgres", "dsn": "postgresql://..."}},
