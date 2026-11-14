@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
 from pydantic import BaseModel
@@ -18,6 +20,7 @@ from memu.database.models import (
     Resource,
 )
 from memu.database.repositories import RecallFileRepo, ResourceRepo
+from memu.database.transaction import preserve_state
 
 
 class InMemoryStore(Database):
@@ -53,6 +56,16 @@ class InMemoryStore(Database):
         self.recall_file_segment_repo = InMemoryFileSegmentRepository(
             state=self.state, recall_file_segment_model=recall_file_segment_model
         )
+
+    @contextmanager
+    def atomic(self) -> Iterator[None]:
+        with preserve_state(self.state):
+            yield
+
+    @contextmanager
+    def snapshot(self) -> Iterator[None]:
+        with self.state.lock:
+            yield
 
     def close(self) -> None:
         return None
