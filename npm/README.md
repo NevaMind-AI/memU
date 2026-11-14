@@ -58,6 +58,13 @@ Using Python already? Skip npm entirely: `uvx --from memu-cli memu --help`, or `
 
 See the [main README](https://github.com/NevaMind-AI/MemU#readme) for the memory model, library API, and self-hosting options.
 
+## Codex hook diagnostics
+
+Inspect retrieval traces in `~/.memu/hosts/codex/log/hooks/retrieve/`: each
+invocation produces one readable JSON document, and existing `.log` files remain.
+The `memu-codex hook-status` query command is retired; automatic background-memory
+startup snapshots are still delivered by `memorize-hook`.
+
 ## License
 
 Apache-2.0

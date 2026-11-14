@@ -186,21 +186,17 @@ def test_real_lock_error_is_not_busy(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "status,code",
-    [("worker_started", 2), ("started", 0), ("busy", 0), ("cooldown", 0), ("succeeded", 0), ("failed", 1)],
+    "status",
+    ["worker_started", "started", "busy", "cooldown", "succeeded", "failed"],
 )
-def test_worker_status_distinguishes_admission(tmp_path, capsys, status, code):
+def test_worker_status_distinguishes_admission(tmp_path, status):
     folder = tmp_path / "log/hooks/memorize"
     folder.mkdir(parents=True)
     log = folder / "2026-01-02_00-00-02.000000-3.log"
     log.write_text(
         "=== WORKER codex pid=3 ===\n" + (f"=== MEMORIZE status={status} ===\n" if status != "worker_started" else "")
     )
-    retrieve = tmp_path / "log/hooks/retrieve"
-    retrieve.mkdir(parents=True)
-    (retrieve / log.name).write_text('{"hook":"UserPromptSubmit","status":"empty_result"}\n')
-    assert cli.main(["hook-status", "--since", "0", "--base-dir", str(tmp_path)]) == code
-    assert json.loads(capsys.readouterr().out)["memorize"]["status"] == status
+    assert hook_status.memorize_status(log)["status"] == status
 
 
 def test_title_then_user_content_waits_for_later_admitted_run(tmp_path, monkeypatch):
@@ -286,7 +282,9 @@ def test_retrieve_ignores_memorize_lock_and_cooldown(tmp_path, monkeypatch, caps
             assert cli.main(["prompt-hook", *(["--base-dir", str(base)] if custom_base else [])]) == 0
             assert "synthetic memory" in capsys.readouterr().out
     assert len(calls) == 2
-    assert hook_status.status(base, 0)["retrieve"]["status"] == "context_returned"
+    logs = list((base / "log/hooks/retrieve").glob("*.json"))
+    assert len(logs) == 2
+    assert all(json.loads(path.read_text(encoding="utf-8"))["status"] == "context_returned" for path in logs)
 
 
 def test_default_callback_and_cli_share_host_base(tmp_path, monkeypatch, capsys):
@@ -318,7 +316,6 @@ def test_default_callback_and_cli_share_host_base(tmp_path, monkeypatch, capsys)
     expected = str(tmp_path / ".memu/hosts/codex")
     assert str(calls[0][1].base) == expected
     assert cli.build_parser().parse_args(["hook-run"]).base_dir == "~/.memu/hosts/codex"
-    assert cli.build_parser().parse_args(["hook-status", "--since", "0"]).base_dir == "~/.memu/hosts/codex"
 
 
 @pytest.mark.parametrize("outcome", ["busy", "cooldown", "succeeded", "failed", "state_error"])
@@ -346,8 +343,9 @@ def test_logged_worker_admission_and_failure(tmp_path, monkeypatch, pipeline, ou
         code = notify_console.main()
     assert code == (2 if outcome == "failed" else 1 if outcome == "state_error" else 0)
     actual = "failed" if outcome == "state_error" else outcome
-    assert hook_status.status(tmp_path, 0)["memorize"]["status"] == actual
-    log = next((tmp_path / "log/hooks/memorize").glob("*.log")).read_text()
+    path = next((tmp_path / "log/hooks/memorize").glob("*.log"))
+    assert hook_status.memorize_status(path)["status"] == actual
+    log = path.read_text()
     assert ("status=started" in log) is (outcome in {"succeeded", "failed"})
     if outcome in {"busy", "cooldown", "state_error"}:
         assert pipeline == []
