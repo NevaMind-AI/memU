@@ -10,15 +10,13 @@ import pytest
 from memu.hosts import templates
 from memu.hosts.claude_code.cli import SPEC as CLAUDE
 from memu.hosts.codex.cli import SPEC as CODEX
-from memu.hosts.cola.cli import SPEC as COLA
 from memu.hosts.cursor.cli import SPEC as CURSOR
-from memu.hosts.generic.cli import SPEC as GENERIC
 from memu.hosts.hermes.cli import SPEC as HERMES
 from memu.hosts.host_cli import DOCS, HostSpec
 from memu.hosts.openclaw.cli import SPEC as OPENCLAW
 from memu.hosts.workbuddy.cli import SPEC as WORKBUDDY
 
-SPECS = (CLAUDE, CURSOR, HERMES, CODEX, OPENCLAW, WORKBUDDY, COLA, GENERIC)
+SPECS = (CLAUDE, CURSOR, HERMES, CODEX, OPENCLAW, WORKBUDDY)
 
 
 @pytest.mark.parametrize("spec", SPECS, ids=lambda spec: spec.host)

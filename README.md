@@ -24,7 +24,7 @@ memU is a lightweight, agent-driven memory system that gives users a shared LLM 
 
 ## Quick start
 
-memU works with Codex, Claude Code, Cursor, OpenClaw, Hermes, WorkBuddy, Cola, pi, and more. See [Host adapters](#host-adapters-memory-for-desktop-coding-agents).
+memU works with Codex, Claude Code, Cursor, OpenClaw, Hermes, WorkBuddy, and pi. See [Host adapters](#host-adapters-memory-for-desktop-coding-agents).
 
 **Cross-device · Free · Unlimited · [View online](https://memu.so)**
 
@@ -103,6 +103,25 @@ To run memU locally with your own storage and embedding provider, send this mess
 
 > Read [https://raw.githubusercontent.com/NevaMind-AI/MemU/main/SKILL.md](https://raw.githubusercontent.com/NevaMind-AI/MemU/main/SKILL.md) and follow it to install memU.
 
+## Upgrading from Cola or generic
+
+The Cola and generic adapters, including `memu-cola` and `memu-agent`, have been
+removed. **Before upgrading**, use the previous installation to print the guide
+for each integration you installed:
+
+```sh
+memu-cola docs uninstall
+memu-agent docs uninstall
+```
+
+Follow the applicable guide to disable and remove that integration's scheduled
+tasks and managed retrieval instructions/skills. Verify ownership before deleting
+files or scheduler entries, and preserve user-edited or unrelated content. Keep
+the shared memory store, `~/.memu/config.env`, and tooling needed by other hosts.
+Upgrading the package does not clean up integrations; leftover tasks and retrieval
+instructions will call commands that no longer exist. If already upgraded, restore
+your previous package version to complete cleanup first.
+
 ## Uninstall
 
 To uninstall memU, send this message to your agent:
@@ -126,16 +145,14 @@ memU runs as a sidecar to a desktop agent, one binary per host. Each binds two s
 | OpenClaw | `memu-openclaw` | `~/.openclaw/agents/<agentId>/agent/openclaw-agent.sqlite` (SQLite, read-only) + legacy `<agentId>/sessions/*.jsonl` | `~/.openclaw/workspace/AGENTS.md` |
 | Hermes Agent | `memu-hermes` | `~/.hermes/state.db` (SQLite, read-only) | `~/.hermes/SOUL.md` |
 | WorkBuddy | `memu-workbuddy` | `~/.workbuddy/projects/<project>/<session>.jsonl` | `~/.workbuddy/SOUL.md` |
-| Cola | `memu-cola` | `~/.cola/sessions/<scope>/<session>.jsonl` | `~/.cola/memory-bank/MEMORY.md` |
 | pi | `memu-pi` | `~/.pi/agent/sessions/<encoded-cwd>/<session>.jsonl` | `~/.pi/agent/AGENTS.md` |
-| **any other agent** | `memu-agent` | found by `memu-agent detect` (JSONL dialect sniffed) | found by `detect` (AGENTS.md / CLAUDE.md / SOUL.md / …) |
 
-For agents without a dedicated binary, `memu-agent detect` probes the machine and reports per agent whether **memorization** works (a recognizable session log exists) and whether **retrieval** works (an instruction file exists to patch) — then the same verbs run against what it found.
+Hosts not listed above are currently unsupported for new installations.
 
 All hosts share one configured memory backend via `~/.memu/config.env` — local
 or MemU Cloud. What one host's sessions taught memU, another host retrieves.
 
-Installation is the one-message setup in [Quick start](#quick-start) or [Self-hosted](#self-hosted). [SKILL.md](SKILL.md) is the routing skill it hands your agent: install the package, identify which host you are (falling back to `memu-agent detect` for anything without a dedicated adapter), print that host's packaged install guide (`<binary> docs install`), and follow it — configure the memory backend, register the scheduled bridging task, patch the instruction file, each step behind a verify gate — then report which seams (memorization / retrieval) are now active.
+Installation is the one-message setup in [Quick start](#quick-start) or [Self-hosted](#self-hosted). [SKILL.md](SKILL.md) is the routing skill it hands your agent: identify your supported host, install the package, print that host's packaged install guide (`<binary> docs install`), and follow it — configure the memory backend, register the scheduled bridging task, patch the instruction file, each step behind a verify gate — then report which seams (memorization / retrieval) are now active.
 
 Afterwards `<binary> doctor` proves the whole loop resolves: config, selected
 mode, and a live retrieval.
@@ -155,7 +172,7 @@ To retrieve manually, run the adapter for your host:
 
 ```bash
 memu-codex retrieve "What should I remember about this project?"
-# or: memu-claude-code / memu-cursor / memu-openclaw / memu-hermes / memu-workbuddy / memu-cola / memu-pi / memu-agent
+# or: memu-claude-code / memu-cursor / memu-openclaw / memu-hermes / memu-workbuddy / memu-pi
 ```
 
 For pi, run `memu-pi install` to configure the memory backend and install the
