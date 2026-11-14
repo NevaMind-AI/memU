@@ -11,6 +11,7 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
+from memu.hosts import instruction
 from memu.hosts.hooks.admission import workspace_lock
 from memu.hosts.pi import memorize_hook
 from memu.hosts.pi.prompt_hook import prompt_hook
@@ -63,20 +64,42 @@ async def _remove(args: argparse.Namespace) -> int:
             print("Another pi extension update is running", file=sys.stderr)
             return 2
         destination = target()
+        home = agent_dir()
+        full = getattr(args, "cleanup_retrieval", False)
+        if full:
+            instruction.check_skill_cleanup(home / "skills", "memu-pi")
         removed = int(destination.exists())
         destination.unlink(missing_ok=True)
+        cleaned = (
+            instruction.cleanup(
+                [home / "AGENTS.md", home / "AGENTS.override.md"], "memu-pi", skills_dir=home / "skills"
+            )
+            if full
+            else []
+        )
     notice = "Run /reload or open a new pi session to unload the memU extension."
+    if full:
+        notice += " Inspect historical schedules with memu-pi docs uninstall."
     if getattr(args, "json", False):
-        print(json.dumps({"status": "passed", "removed": removed, "notice": notice}))
+        print(
+            json.dumps({
+                "status": "passed",
+                "removed": removed,
+                "retrieval_artifacts_removed": len(cleaned),
+                "notice": notice,
+            })
+        )
     else:
-        print(f"🧹  Removed {removed} memU extension(s). {notice}")
+        print(f"🧹  Removed {removed} memU extension(s) and {len(cleaned)} retrieval artifact(s). {notice}")
     return 0
 
 
 def register(sub: Any) -> None:
-    parser = sub.add_parser("uninstall", help="Remove memU's pi extension; preserve pi settings and memory")
+    parser = sub.add_parser(
+        "uninstall", help="Remove memU's pi extension and owned retrieval instructions/skills; preserve memory"
+    )
     parser.add_argument("--json", action="store_true")
-    parser.set_defaults(handler=_remove)
+    parser.set_defaults(handler=_remove, cleanup_retrieval=True)
     memorize_hook.register(sub)
     for name, handler, help_text in (
         ("install-prompt-hook", _install, "Install pi's asynchronous retrieval and memorization extension"),

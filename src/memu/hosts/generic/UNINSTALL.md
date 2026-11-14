@@ -1,5 +1,7 @@
 # Uninstall memU (generic `memu-agent`)
 
+<!-- memu-cleanup: owned-artifacts -->
+
 ## Task identity
 
 - Current task name: `{{task_name}}`
@@ -46,8 +48,10 @@ differ. A cron entry invokes
 layout, inlines the pipeline prompt directly); a native-scheduler prompt is
 recognizable as the three-step block running
 `memu-agent prepare --session-dir …`, the job files, then `memu-agent commit`.
-Everything else in the scheduler is the user's and stays; for cron:
-`crontab -l | grep -vE '{{task_name_pattern}}|hosts/agent/bridge\.sh|memU bridging pipeline' | crontab -`.
+Everything else in the scheduler is the user's and stays. Save the original
+crontab, inspect the action/wrapper to confirm this host and remove only those
+exact entries with `crontab -e`. Do not filter by a task name or generic pipeline
+phrase that could also match another host.
 If nothing at all remains, `crontab -r` removes the now-empty crontab cleanly.
 The `bridge.sh`, `bridge-prompt.txt`, and `bridge.log` files live under
 `~/.memu/hosts/agent/` and go with the host residue in the later cleanup part.

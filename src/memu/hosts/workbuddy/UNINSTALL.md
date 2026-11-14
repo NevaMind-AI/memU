@@ -1,5 +1,7 @@
 # Uninstall memU for WorkBuddy
 
+<!-- memu-cleanup: owned-artifacts -->
+
 ## Task identity
 
 - Current task name: `{{task_name}}`

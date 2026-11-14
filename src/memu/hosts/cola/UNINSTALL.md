@@ -1,5 +1,7 @@
 # Uninstall memU for Cola
 
+<!-- memu-cleanup: owned-artifacts -->
+
 ## Task identity
 
 - Current task name: `{{task_name}}`
@@ -9,11 +11,18 @@
 1. In Cola's scheduled-task UI, disable and remove every confirmed memU task
    whose name is in {{all_task_names}}.
    Do not edit `~/.cola/crons.json` directly.
-2. Run `memu-cola remove-instruction`. This removes only memU's managed block
-   from `~/.cola/memory-bank/MEMORY.md`; existing memory remains intact.
-3. Remove `~/.cola/resources/skills/memu-retrieve/` if it remains after the
-   command. Keep `~/.memu/config.env` and its memory store unless the user
-   explicitly asks to erase memory.
+2. Preview `memu-cola remove-instruction --dry-run`, then run
+   `memu-cola remove-instruction`. The command removes memU's managed block
+   from `~/.cola/memory-bank/MEMORY.md` and its verified retrieval skill from
+   `~/.cola/resources/skills/memu-retrieve/`; existing user memory remains intact.
+3. Verify the managed block and skill are gone. Installation/refresh records the
+   host and content fingerprint in `.memu-owned.json`, allowing unchanged recorded
+   skills to be removed across package/template updates. Unrecorded skills must
+   match packaged content. Edits, extra files, links or invalid records stop cleanup;
+   report the diagnostic and review ownership rather than deleting the directory
+   manually. Do not announce completion while a confirmed entry remains.
+   Keep `~/.memu/config.env` and its memory store unless the user explicitly asks
+   to erase memory.
 4. Tell memU the uninstall happened, **before** the package can go — this one
    event is delivered on the spot, and the next step may remove the binary that
    would otherwise have delivered it later:
