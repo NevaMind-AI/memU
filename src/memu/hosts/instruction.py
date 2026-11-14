@@ -194,7 +194,7 @@ def block(binary: str, *, skill: bool = False, skill_text: str | None = None) ->
 
 def _block_re(binary: str) -> re.Pattern[str]:
     return re.compile(
-        rf"^{re.escape(begin(binary))}\n.*?^{re.escape(END)}\n?",
+        rf"^{re.escape(begin(binary))}\r?\n.*?^{re.escape(END)}(?:\r?\n)?",
         re.DOTALL | re.MULTILINE,
     )
 
@@ -229,15 +229,22 @@ def strip(current: str, binary: str) -> str:
         start = match.start()
         # patch appends one separator newline after existing non-empty content.
         # Remove only that adjacent separator, never normalize the user's text.
-        if current[max(0, start - 2) : start] == "\n\n":
-            start -= 1
+        separator = re.search(r"(?:\r?\n)(\r?\n)\Z", current[:start])
+        if separator:
+            start -= len(separator.group(1))
         current = current[:start] + current[match.end() :]
     return current
 
 
+def _read_text(path: Path) -> str:
+    """Read without newline conversion so user-owned bytes survive edits."""
+    with path.open(encoding="utf-8", newline="") as handle:
+        return handle.read()
+
+
 def _write(path: Path, updated: str, *, backup: bool, dry_run: bool) -> tuple[bool, str]:
     """Rewrite ``path`` to ``updated``, diffing first. Returns ``(changed, diff)``."""
-    current = path.read_text(encoding="utf-8") if path.is_file() else ""
+    current = _read_text(path) if path.is_file() else ""
     diff = "".join(
         difflib.unified_diff(
             current.splitlines(keepends=True),
@@ -256,7 +263,7 @@ def _write(path: Path, updated: str, *, backup: bool, dry_run: bool) -> tuple[bo
     fd, temporary_name = tempfile.mkstemp(dir=target.parent, prefix=".tmp-", suffix=target.suffix)
     temporary = Path(temporary_name)
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
             handle.write(updated)
         if target.exists():
             shutil.copymode(target, temporary)
@@ -282,7 +289,7 @@ def install(
     current skill).
     """
     path = path.expanduser()
-    current = path.read_text(encoding="utf-8") if path.is_file() else ""
+    current = _read_text(path) if path.is_file() else ""
     return _write(path, patch(current, binary, skill=skill, skill_text=skill_text), backup=True, dry_run=dry_run)
 
 
@@ -298,7 +305,7 @@ def remove(path: Path, binary: str, *, dry_run: bool = False) -> tuple[bool, str
     path = path.expanduser()
     if not path.is_file():
         return False, ""
-    current = path.read_text(encoding="utf-8")
+    current = _read_text(path)
     return _write(path, strip(current, binary), backup=True, dry_run=dry_run)
 
 
