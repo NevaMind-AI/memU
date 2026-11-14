@@ -9,6 +9,12 @@ description: Install the latest development build of memU-cli from git (main HEA
 > latest memU"). Do the install yourself — the user should not run commands by
 > hand. This installs memU-cli from **git `main`**, the latest source.
 
+## Before installing
+
+Identify the agent executing this guide and check the supported-host table in
+Step 4 before removing or installing any package. If the host is unknown or
+absent from the table, report that it is currently unsupported and stop.
+
 ## Step 1 — remove any existing memU install
 
 An older memU already on the machine can stay on `PATH` and **shadow the one you
@@ -103,7 +109,7 @@ A bare "yes" / "ok" means **Use this version** — default to proceeding.
 ## Step 4 — set up memU
 
 You now have the latest binaries. Identify **which agent you are** and use its
-binary — memU has nine host adapters:
+binary from the supported hosts below:
 
 | You are | Your binary |
 | --- | --- |
@@ -113,9 +119,10 @@ binary — memU has nine host adapters:
 | OpenClaw | `memu-openclaw` |
 | Hermes | `memu-hermes` |
 | WorkBuddy | `memu-workbuddy` |
-| Cola | `memu-cola` |
 | pi | `memu-pi` |
-| anything else | `memu-agent` — run `memu-agent detect` if unsure |
+
+If you cannot identify your host or it is not in the table, report that it is
+currently unsupported and stop the installation.
 
 Then print your host's packaged guide and follow it to the letter:
 

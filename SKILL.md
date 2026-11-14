@@ -17,6 +17,12 @@ answering. Each supported host has its own adapter binary carrying its own
 install guide. Your job here is three steps: install the package, pick your
 binary, print and follow its guide.
 
+## Before installing
+
+Identify the agent executing this skill and check the supported-host table in
+Step 2 before installing the package. If the host is unknown or absent from the
+table, report that it is currently unsupported and stop the installation.
+
 ## Before installing with Codex
 
 If you are Codex, check the session's effective sandbox mode before Step 1.
@@ -62,20 +68,10 @@ executing this skill):
 | OpenClaw | `memu-openclaw` |
 | Hermes Agent | `memu-hermes` |
 | WorkBuddy | `memu-workbuddy` |
-| Cola | `memu-cola` |
 | pi | `memu-pi` |
-| anything else | `memu-agent` |
 
-Unsure, or not in the table? You are `memu-agent`. Run:
-
-```
-memu-agent detect
-```
-
-It probes this machine and reports, per agent, whether **memorization** works
-(a recognizable session log exists) and whether **retrieval** works (an
-instruction file exists to patch) — and it will redirect you to a dedicated
-binary if your host turns out to have one.
+If you cannot identify your host or it is not in the table, report that it is
+currently unsupported and stop the installation.
 
 For Codex, Claude Code, and pi, continue directly to Step 3: their installers handle backend configuration
 and verification in one invocation. Pass any user-supplied backend inputs to that
@@ -161,12 +157,16 @@ Three rules that hold for every host:
   type back to you to start the uninstall flow.
 
   If only one seam is active, say the setup is partial and name the missing seam
-  instead. For `memu-agent`, use the detect report to decide which seams are active.
+  instead.
 
 ## Uninstall
 
-Same routing, in reverse. If the user asked to **uninstall** memU instead:
-identify your binary exactly as in Step 2, then print and follow its removal
+For an existing Cola or generic integration, use its original `memu-cola` or
+`memu-agent` binary to print `docs uninstall`; these commands remain available
+for existing installations.
+
+For other hosts, if the user asked to **uninstall** memU:
+identify your binary as in Step 2, then print and follow its removal
 guide —
 
 ```
