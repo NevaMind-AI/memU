@@ -212,6 +212,8 @@ def test_readback_must_match(machine, monkeypatch):
 @pytest.mark.parametrize("doc", ["INSTALL.md", "UNINSTALL.md"])
 @pytest.mark.parametrize("marker", ["", "<!-- memu-hermes-install: plugin-v2 -->"])
 def test_guides_reject_older_install_docs(marker, doc):
-    tokens = "<!-- {{task_name}} | {{former_task_names}} | {{all_task_names}} -->"
+    tokens = (
+        "<!-- {{task_name}} | {{former_task_names}} | {{all_task_names}} -->\n<!-- memu-cleanup: owned-artifacts -->"
+    )
     assert not templates._valid_host_doc("hermes", doc, marker + "\n" + tokens)
     assert templates._valid_host_doc("hermes", doc, "<!-- memu-hermes-install: soul-v1 -->\n" + tokens)

@@ -1,5 +1,7 @@
 # Uninstall memU for Hermes Agent
 
+<!-- memu-cleanup: owned-artifacts -->
+
 <!-- memu-hermes-install: soul-v1 -->
 <!-- {{task_name}} | {{former_task_names}} | {{all_task_names}} -->
 
@@ -11,7 +13,11 @@ Use the same `HERMES_HOME` as the installed Hermes profile. Uninstall removes
 memU's managed SOUL.md block, memorize shell-hook entry and its exact allowlist
 approval, and legacy `memu-retrieve` skill. Other SOUL.md
 content, sessions, shared memory, working files, and unrelated settings are kept.
-Repeating uninstall is safe.
+Repeating uninstall is safe. Skills installed/refreshed with `.memu-owned.json`
+are verified by host and content fingerprint, independent of package/template
+version. Unrecorded skills must match packaged content. Edits, extra files,
+links and invalid records stop cleanup for ownership review; do not bypass the
+check by deleting a directory manually.
 
 A legacy `memu-memory` plugin is inspected for ownership, then removed through
 `hermes plugins remove memu-memory`. Directory absence is checked afterward.

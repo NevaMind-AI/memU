@@ -1,5 +1,7 @@
 # Uninstall memU for OpenClaw
 
+<!-- memu-cleanup: owned-artifacts -->
+
 ## Task identity
 
 - Current task name: `{{task_name}}`
@@ -62,12 +64,14 @@ left is already the desired end state. If this install used a non-default
 workspace (`OPENCLAW_WORKSPACE_DIR`, or a profile), pass
 `--path <workspace>/AGENTS.md`.
 
-The same command takes the skill the block pointed at out too — memU's own
-`memu-retrieve` directory under `~/.openclaw/skills/`. It comes out after the
-pointer, so nothing is ever left aiming at a deleted skill; the directory is
-memU's own (installed whole, so it goes whole), while a same-named directory
-without memU's `SKILL.md` and the user's or OpenClaw's other entries in
-`~/.openclaw/skills/` are left alone. So there is nothing to remove by hand. If
+The same command removes the verified `memu-retrieve` directory under
+`~/.openclaw/skills/` after its instruction pointer. Installation/refresh records
+the host and content fingerprint in `.memu-owned.json`, so unchanged recorded
+skills remain removable across package/server-template updates. Unrecorded skills
+must match packaged content. Edits, extra entries, missing markers, links or
+invalid records stop cleanup before instructions change; report the diagnostic
+and review ownership instead of deleting a directory manually. Other skills stay
+intact. If
 this install used a non-default `OPENCLAW_STATE_DIR`, the skill sits under
 `<state-dir>/skills/` — pass `--skills-dir <state-dir>/skills` so removal finds
 it.

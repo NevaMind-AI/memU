@@ -55,7 +55,7 @@ memu-hermes install-instruction
 memu-hermes remove-instruction
 ```
 
-Default-path instruction installation removes a verified packaged legacy
+Default-path instruction installation removes a verified legacy
 `memu-retrieve` skill after writing the inline procedure. Edited skills, extra
 files, or linked paths are preserved and require ownership review; full install
 and uninstall check this before changing lifecycle integration. `--path` can target a separate SOUL.md
