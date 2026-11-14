@@ -211,9 +211,7 @@ and their searchable segments atomically; a storage failure rolls back the entir
 batch. Embedding requests run outside write ownership, and commits re-plan against
 current records before writing. Concurrent full-body updates use last-writer-wins
 semantics. Each listing or retrieval call reads a consistent snapshot; separate
-calls, including pagination requests, do not share a snapshot. See
-[Atomic local commits](docs/adr/0022-atomic-local-commits.md) for backend coverage
-and implementation tradeoffs.
+calls, including pagination requests, do not share a snapshot.
 
 ```python
 service = MemoryService(
