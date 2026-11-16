@@ -16,6 +16,4 @@ settings. See `memu-pi install --help`. Use `--language zh` if requested.
 The CLI configures and verifies the backend, installs the extension, and checks
 its contents. Stop on a nonzero exit and report its diagnostic. On success, run
 `/reload` in pi or open a new session, then tell the user automatic retrieval and
-background memory are configured. Accept the CLI result; do not inspect
-instruction/skill files or run extra cleanup commands after success. Investigate
-only a failure reported by the CLI; activation needs no extra retrieval probe.
+background memory are configured.

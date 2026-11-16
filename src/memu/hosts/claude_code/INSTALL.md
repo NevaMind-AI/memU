@@ -46,10 +46,6 @@ If authentication is missing, relay the CLI diagnostic. The user completes login
 or provider configuration before retrying. Keep credentials out of reports and
 let the CLI write backend config; respect configuration identity protections.
 
-On success, accept the CLI result. Do not inspect instruction/skill files, run
-extra cleanup commands or add filesystem checks before reporting completion.
-Investigate only a failure reported by the CLI.
-
 On success, reproduce this report with its emojis, labels and order intact, and
 fill placeholders from actual CLI results. Translate the prose only when the user
 explicitly requests Chinese. Set CLI request status to `verified` only when
