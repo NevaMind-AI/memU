@@ -24,9 +24,7 @@ import pytest
 from memu.hosts.bridging import Layout
 from memu.hosts.claude_code.cli import SPEC as CLAUDE
 from memu.hosts.codex.cli import SPEC as CODEX
-from memu.hosts.cola.cli import SPEC as COLA
 from memu.hosts.cursor.cli import SPEC as CURSOR
-from memu.hosts.generic.cli import SPEC as GENERIC
 from memu.hosts.hermes.cli import SPEC as HERMES
 from memu.hosts.host_cli import HostSpec, ScheduleBackend, build_parser, run
 from memu.hosts.openclaw.cli import SPEC as OPENCLAW
@@ -34,7 +32,7 @@ from memu.hosts.pi.cli import SPEC as PI
 from memu.hosts.scheduling import prompt, windows
 from memu.hosts.workbuddy.cli import SPEC as WORKBUDDY
 
-SPECS = (CLAUDE, CURSOR, HERMES, CODEX, OPENCLAW, WORKBUDDY, COLA, PI, GENERIC)
+SPECS = (CLAUDE, CURSOR, HERMES, CODEX, OPENCLAW, WORKBUDDY, PI)
 
 EXPECTED_TASK_NAMES = {
     "claude-code": ("memu-bridging-claude-code", ("memu-remember-claude-code",)),
@@ -43,9 +41,7 @@ EXPECTED_TASK_NAMES = {
     "codex": ("memu-bridging-codex", ("memu-remember", "memu-bridging")),
     "openclaw": ("memu-bridging-openclaw", ("memu-remember", "memu-bridging")),
     "workbuddy": ("memu-bridging-workbuddy", ()),
-    "cola": ("memu-bridging-cola", ("memu-bridging", "memU 记忆桥接")),
     "pi": ("memu-bridging-pi", ()),
-    "agent": ("memu-bridging-agent", ()),
 }
 
 
@@ -325,17 +321,13 @@ def test_schedule_verb_is_wired() -> None:
 
 
 def test_schedule_backends_describe_existing_host_arrangements() -> None:
-    assert {
-        spec.host: spec.schedule_backend for spec in (CLAUDE, CURSOR, HERMES, CODEX, OPENCLAW, WORKBUDDY, COLA, GENERIC)
-    } == {
+    assert {spec.host: spec.schedule_backend for spec in (CLAUDE, CURSOR, HERMES, CODEX, OPENCLAW, WORKBUDDY)} == {
         "claude-code": "hook",
         "cursor": "os",
         "hermes": "os",
         "codex": "native",
         "openclaw": "native",
         "workbuddy": "native",
-        "cola": "native",
-        "agent": "external",
     }
 
 
@@ -354,7 +346,7 @@ def test_schedule_backend_does_not_control_verb_wiring(backend: ScheduleBackend)
 
 def test_unwired_host_has_no_schedule_verb() -> None:
     # These adapters have no OS schedule maintenance command.
-    for spec in (CODEX, OPENCLAW, WORKBUDDY, COLA, GENERIC):
+    for spec in (CODEX, OPENCLAW, WORKBUDDY):
         with pytest.raises(SystemExit):
             build_parser(spec).parse_args(["schedule", "status"])
     # ...while a wired host does have it.
@@ -443,7 +435,7 @@ def test_pi_pipeline_prompt_matches_the_bridging_doc() -> None:
     assert doc_prompt == prompt.bridging_pipeline_prompt(PI)
 
 
-@pytest.mark.parametrize("pkg", ["cursor", "hermes", "pi", "generic"])
+@pytest.mark.parametrize("pkg", ["cursor", "hermes", "pi"])
 def test_bridging_doc_cron_entries_stay_short(pkg: str) -> None:
     # The bug class behind memU#591: an inlined pipeline prompt pushed the guide's
     # crontab entry past cron's ~1KB line buffer, so every tick died mid-quote
@@ -476,10 +468,8 @@ def test_hermes_guide_migrates_native_job_before_os_registration() -> None:
     ("pkg", "binary", "identity"),
     [
         ("cursor", "memu-cursor", r"hosts/cursor/bridge\.sh|memU bridging pipeline"),
-        ("generic", "memu-agent", r"hosts/agent/bridge\.sh|memU bridging pipeline"),
         ("openclaw", "memu-openclaw", ".cron_job.openclaw.json"),
         ("workbuddy", "memu-workbuddy", "WorkBuddy's automation list"),
-        ("cola", "memu-cola", "{{all_task_names}}"),
     ],
 )
 def test_install_refreshes_existing_bridge_before_registration(pkg: str, binary: str, identity: str) -> None:
@@ -507,20 +497,6 @@ def test_cursor_uninstall_documents_windows_schedule_removal() -> None:
     assert "memu-cursor schedule uninstall" in doc
     assert "memu-cursor schedule status" in doc
     assert "Get-ScheduledTask -TaskPath" not in doc
-
-
-def test_cola_task_recreates_existing_bridge() -> None:
-    from importlib.resources import files
-
-    doc = (files("memu.hosts.cola") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
-    normalized = " ".join(doc.split())
-    existing = normalized.index("If any task whose name is in {{all_task_names}} already exists")
-    create = normalized.index("Set its prompt")
-    refresh = normalized[existing:create]
-
-    assert "remove only that task" in refresh
-    assert "verify it no longer appears" in refresh
-    assert "update it rather than" not in normalized
 
 
 def test_openclaw_task_recreates_confirmed_bridge() -> None:
@@ -552,15 +528,6 @@ def test_openclaw_task_recreates_confirmed_bridge() -> None:
             ("$HOME/.memu/hosts/hermes/bridge.sh", "{{task_name}}", "hermes cron remove <job-id>"),
             ("hosts/hermes/bridge\\.sh|memU bridging pipeline", "hermes cron remove <job-id>"),
         ),
-        (
-            "generic",
-            (
-                "$HOME/.memu/hosts/agent/bridge.sh",
-                "memu-agent prepare --session-dir <SESSION_DIR>",
-                "memu-agent commit",
-            ),
-            ("hosts/agent/bridge\\.sh|memU bridging pipeline", "memu-agent prepare --session-dir …"),
-        ),
     ],
 )
 def test_os_scheduler_identity_docs_stay_aligned(
@@ -580,12 +547,6 @@ def test_os_scheduler_identity_docs_stay_aligned(
 
 def test_native_scheduler_identity_docs_stay_explicit() -> None:
     from importlib.resources import files
-
-    cola_source = (files("memu.hosts.cola") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
-    cola = " ".join(COLA.render_doc(cola_source).split())
-    assert COLA.task_name in cola
-    assert all(name in cola for name in COLA.former_task_names)
-    assert "desktop:local" in cola
 
     codex_source = (files("memu.hosts.codex") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
     assert codex_source == ""
@@ -607,16 +568,6 @@ def test_native_scheduler_identity_docs_stay_explicit() -> None:
     assert "automation ID plus complete pipeline" in workbuddy
     assert "exact automation ID" in workbuddy_uninstall
     assert "name alone is never enough" in workbuddy_uninstall
-
-    generic_source = (files("memu.hosts.generic") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
-    generic_uninstall_source = (files("memu.hosts.generic") / "UNINSTALL.md").read_text(encoding="utf-8")
-    generic = GENERIC.render_doc(generic_source)
-    generic_uninstall = GENERIC.render_doc(generic_uninstall_source)
-    assert f"use `{GENERIC.task_name}`" in generic
-    assert "replace the final `agent`" in generic
-    assert "matching each" in generic and "--base-dir ~/.memu/hosts/<name>" in generic
-    assert "pipeline prompt remains the load-bearing" in generic
-    assert "confirm the pipeline prompt" in generic_uninstall
 
 
 def test_claude_preflight_never_treats_task_presence_as_current() -> None:
