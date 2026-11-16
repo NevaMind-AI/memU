@@ -10,7 +10,7 @@ import os
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -52,30 +52,36 @@ def test_same_clock_and_process_do_not_overwrite_or_skip_retrieval(tmp_path, mon
 @pytest.mark.parametrize("event", ["{", "[]", '{"hook_event_name":"other"}'])
 def test_invalid_event_still_has_one_failed_trace(tmp_path, monkeypatch, event):
     monkeypatch.setattr(sys, "stdin", io.StringIO(event))
+    before = datetime.now(UTC)
     assert invoke(tmp_path) == 0
+    after = datetime.now(UTC)
     logs = list((tmp_path / "log/hooks/retrieve").iterdir())
     assert len(logs) == 1 and logs[0].suffix == ".json"
     text = logs[0].read_text(encoding="utf-8")
     trace = json.loads(text)
     assert trace["status"] == "failed" and trace["error"]
+    observed_at = datetime.fromisoformat(trace["observed_at"])
+    assert observed_at.utcoffset() == UTC.utcoffset(None)
+    assert before <= observed_at <= after
     assert trace["elapsed_ms"] >= 0
     assert text == json.dumps(trace, ensure_ascii=False, indent=2) + "\n"
 
 
-def test_log_open_failure_keeps_existing_skip_behavior(tmp_path, monkeypatch, capsys):
-    original = Path.open
+@pytest.mark.parametrize("failure", ["mkdir", "open"])
+def test_log_failure_does_not_skip_retrieval(tmp_path, monkeypatch, capsys, failure):
+    original = getattr(Path, failure)
     calls: list[dict[str, object]] = []
 
-    def open_log(path, *args, **kwargs):
-        if path.parent == tmp_path / "log/hooks/retrieve":
+    def fail_log(path, *args, **kwargs):
+        if path == tmp_path / "log/hooks/retrieve" or path.parent == tmp_path / "log/hooks/retrieve":
             raise PermissionError("fixture log unavailable")  # noqa: TRY003
         return original(path, *args, **kwargs)
 
-    monkeypatch.setattr(Path, "open", open_log)
+    monkeypatch.setattr(Path, failure, fail_log)
     monkeypatch.setattr(prompt_hook, "_retrieve", lambda trace: calls.append(trace))
     assert invoke(tmp_path) == 0
     output = capsys.readouterr()
-    assert not calls and not output.out
+    assert len(calls) == 1 and not output.out
     assert "prompt hook log failed" in output.err
 
 

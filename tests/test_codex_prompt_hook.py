@@ -4,6 +4,7 @@ import io
 import json
 import subprocess
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -43,13 +44,18 @@ def test_prompt_hook_preserves_query_and_logs(tmp_path, monkeypatch, capsys, out
         return subprocess.CompletedProcess(argv, 0, json.dumps(memories).encode("utf-8"), b"")
 
     monkeypatch.setattr(prompt_hook.subprocess, "run", retrieve)
+    before = datetime.now(UTC)
     assert main(["prompt-hook"]) == 0
+    after = datetime.now(UTC)
     output = capsys.readouterr()
     logs = list((tmp_path / ".memu/hosts/codex/log/hooks/retrieve").glob("*.json"))
     assert not (tmp_path / ".memu/hosts/codex/log/hooks/memorize").exists()
     assert len(logs) == 1
     text = logs[0].read_text(encoding="utf-8")
     final = json.loads(text)
+    observed_at = datetime.fromisoformat(final["observed_at"])
+    assert observed_at.utcoffset() == UTC.utcoffset(None)
+    assert before <= observed_at <= after
     assert text == json.dumps(final, ensure_ascii=False, indent=2) + "\n"
     if "retrieve_result" in final:
         assert final["returned_counts"] == final["counts"]

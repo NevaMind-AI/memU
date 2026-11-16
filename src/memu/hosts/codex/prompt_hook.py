@@ -9,6 +9,7 @@ import os
 import subprocess
 import sys
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -22,25 +23,31 @@ async def _cmd_prompt_hook(args: argparse.Namespace) -> int:
     if getattr(args, "default_home", False):
         os.environ["CODEX_HOME"] = str(Path.home() / ".codex")
     started = time.monotonic()
-    trace: dict[str, Any] = {"hook": "UserPromptSubmit", "pid": os.getpid(), "status": "started"}
+    trace: dict[str, Any] = {
+        "observed_at": datetime.now(UTC).isoformat(),
+        "hook": "UserPromptSubmit",
+        "pid": os.getpid(),
+        "status": "started",
+    }
     try:
-        base = Path(args.base_dir).expanduser() if args.base_dir is not None else Path.home() / ".memu/hosts/codex"
-        directory = base / "log/hooks/retrieve"
-        directory.mkdir(parents=True, exist_ok=True)
-        with (directory / f"{uuid4()}.json").open("x", encoding="utf-8") as log:
-            try:
-                _retrieve(trace)
-            except subprocess.TimeoutExpired:
-                trace.update(status="failed", error="retrieve subprocess timed out")
-                print(trace["error"], file=sys.stderr)
-            except (OSError, ValueError, TypeError, subprocess.SubprocessError) as exc:
-                trace.update(status="failed", error=str(exc))
-                print(f"memU prompt hook failed: {exc}", file=sys.stderr)
-            finally:
-                trace["elapsed_ms"] = round((time.monotonic() - started) * 1000)
-                print(json.dumps(trace, ensure_ascii=False, indent=2), file=log, flush=True)
-    except OSError as exc:
-        print(f"memU prompt hook log failed: {exc}", file=sys.stderr)
+        _retrieve(trace)
+    except subprocess.TimeoutExpired:
+        trace.update(status="failed", error="retrieve subprocess timed out")
+        print(trace["error"], file=sys.stderr)
+    except (OSError, ValueError, TypeError, subprocess.SubprocessError) as exc:
+        trace.update(status="failed", error=str(exc))
+        print(f"memU prompt hook failed: {exc}", file=sys.stderr)
+    finally:
+        trace["elapsed_ms"] = round((time.monotonic() - started) * 1000)
+        try:
+            base = Path(args.base_dir).expanduser() if args.base_dir is not None else Path.home() / ".memu/hosts/codex"
+            directory = base / "log/hooks/retrieve"
+            directory.mkdir(parents=True, exist_ok=True)
+            (directory / f"{uuid4()}.json").write_text(
+                json.dumps(trace, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            )
+        except OSError as exc:
+            print(f"memU prompt hook log failed: {exc}", file=sys.stderr)
     return 0
 
 
