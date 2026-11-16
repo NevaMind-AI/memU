@@ -35,11 +35,14 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import hashlib
+import json
 import os
 import re
 import shutil
 import stat
 import tempfile
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -191,7 +194,7 @@ def block(binary: str, *, skill: bool = False, skill_text: str | None = None) ->
 
 def _block_re(binary: str) -> re.Pattern[str]:
     return re.compile(
-        rf"^{re.escape(begin(binary))}\n.*?^{re.escape(END)}\n?",
+        rf"^{re.escape(begin(binary))}\r?\n.*?^{re.escape(END)}(?:\r?\n)?",
         re.DOTALL | re.MULTILINE,
     )
 
@@ -222,19 +225,26 @@ def strip(current: str, binary: str) -> str:
     :func:`patch` added, so an install/remove round-trip restores the file
     byte-for-byte.
     """
-    pattern = _block_re(binary)
-    if not pattern.search(current):
-        return current
-    stripped = pattern.sub("", current)
-    stripped = re.sub(r"\n{3,}", "\n\n", stripped)
-    if not stripped.strip():
-        return ""
-    return stripped.rstrip("\n") + "\n"
+    for match in reversed(list(_block_re(binary).finditer(current))):
+        start = match.start()
+        # patch appends one separator newline after existing non-empty content.
+        # Remove only that adjacent separator, never normalize the user's text.
+        separator = re.search(r"(?:\r?\n)(\r?\n)\Z", current[:start])
+        if separator:
+            start -= len(separator.group(1))
+        current = current[:start] + current[match.end() :]
+    return current
+
+
+def _read_text(path: Path) -> str:
+    """Read without newline conversion so user-owned bytes survive edits."""
+    with path.open(encoding="utf-8", newline="") as handle:
+        return handle.read()
 
 
 def _write(path: Path, updated: str, *, backup: bool, dry_run: bool) -> tuple[bool, str]:
     """Rewrite ``path`` to ``updated``, diffing first. Returns ``(changed, diff)``."""
-    current = path.read_text(encoding="utf-8") if path.is_file() else ""
+    current = _read_text(path) if path.is_file() else ""
     diff = "".join(
         difflib.unified_diff(
             current.splitlines(keepends=True),
@@ -253,7 +263,7 @@ def _write(path: Path, updated: str, *, backup: bool, dry_run: bool) -> tuple[bo
     fd, temporary_name = tempfile.mkstemp(dir=target.parent, prefix=".tmp-", suffix=target.suffix)
     temporary = Path(temporary_name)
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
             handle.write(updated)
         if target.exists():
             shutil.copymode(target, temporary)
@@ -279,7 +289,7 @@ def install(
     current skill).
     """
     path = path.expanduser()
-    current = path.read_text(encoding="utf-8") if path.is_file() else ""
+    current = _read_text(path) if path.is_file() else ""
     return _write(path, patch(current, binary, skill=skill, skill_text=skill_text), backup=True, dry_run=dry_run)
 
 
@@ -295,7 +305,7 @@ def remove(path: Path, binary: str, *, dry_run: bool = False) -> tuple[bool, str
     path = path.expanduser()
     if not path.is_file():
         return False, ""
-    current = path.read_text(encoding="utf-8")
+    current = _read_text(path)
     return _write(path, strip(current, binary), backup=True, dry_run=dry_run)
 
 
@@ -316,15 +326,40 @@ def install_skill(
     embedded skill with the server's current full document (for a skill host being
     refreshed from the server).
     """
-    return _write(skill_path(skills_dir), skill_document(binary, skill_text=skill_text), backup=False, dry_run=dry_run)
+    target = skill_path(skills_dir)
+    receipt = target.with_name(".memu-owned.json")
+    if receipt.is_symlink() or (receipt.exists() and not receipt.is_file()):
+        raise ValueError(f"Retrieval skill ownership record is not a regular file: {receipt}")  # noqa: TRY003
+    document = skill_document(binary, skill_text=skill_text).replace("\r\n", "\n").replace("\r", "\n")
+    result = _write(target, document, backup=False, dry_run=dry_run)
+    record = json.dumps({"binary": binary, "sha256": hashlib.sha256(document.encode("utf-8")).hexdigest()}) + "\n"
+    _write(receipt, record, backup=False, dry_run=dry_run)
+    return result
+
+
+def _check_skill_content(target: Path, binary: str, *, recorded: bool) -> None:
+    document = target.read_text(encoding="utf-8")
+    if not recorded:
+        if document != skill_document(binary):
+            message = f"Unrecorded retrieval skill differs from the packaged version; preserved for ownership review: {target}"
+            raise ValueError(message)
+        return
+    receipt = target.with_name(".memu-owned.json")
+    try:
+        record = json.loads(receipt.read_text(encoding="utf-8"))
+    except ValueError as exc:
+        raise ValueError(f"Invalid retrieval skill ownership record; files preserved: {receipt}") from exc  # noqa: TRY003
+    digest = hashlib.sha256(document.encode("utf-8")).hexdigest()
+    if not isinstance(record, dict) or record.get("binary") != binary or record.get("sha256") != digest:
+        raise ValueError(f"Retrieval skill differs from its ownership record; files preserved: {target}")  # noqa: TRY003
 
 
 def check_skill_cleanup(skills_dir: Path, binary: str) -> bool:
-    """Verify a complete packaged skill with no extra entries or links; absence is safe.
+    """Verify a recorded installation or an unrecorded packaged skill, without links/extras.
 
-    Edited/server-refreshed content and ambiguous directories need selective user
-    review. Raise ``ValueError`` without changing anything when ownership is not
-    established. Both installers and direct cleanup use this same check.
+    The receipt describes what was actually installed, independent of package or
+    server template versions. Unknown legacy content and subsequent user edits
+    require review. Rejection precedes all instruction changes.
     """
     target = skill_path(skills_dir)
     directory = target.parent
@@ -337,16 +372,17 @@ def check_skill_cleanup(skills_dir: Path, binary: str) -> bool:
             if not stat.S_ISDIR(entry.st_mode) or getattr(entry, "st_reparse_tag", False):
                 msg = "Retrieval skill contains links or non-directory paths; preserved for ownership review."
                 raise ValueError(msg)
-        if set(directory.iterdir()) != {target}:
+        receipt = directory / ".memu-owned.json"
+        entries = set(directory.iterdir())
+        if entries not in ({target}, {target, receipt}):
             msg = "Retrieval skill has extra or unrecognized entries; preserved for ownership review."
             raise ValueError(msg)
-        entry = target.lstat()
-        if not stat.S_ISREG(entry.st_mode) or getattr(entry, "st_reparse_tag", False):
-            msg = "Retrieval skill contains links or non-file entries; preserved for ownership review."
-            raise ValueError(msg)
-        if target.read_text(encoding="utf-8") != skill_document(binary):
-            msg = "Retrieval skill differs from the packaged version; preserved for ownership review."
-            raise ValueError(msg)
+        for file in entries:
+            entry = file.lstat()
+            if not stat.S_ISREG(entry.st_mode) or getattr(entry, "st_reparse_tag", False):
+                msg = "Retrieval skill contains links or non-file entries; preserved for ownership review."
+                raise ValueError(msg)
+        _check_skill_content(target, binary, recorded=receipt in entries)
     except (OSError, UnicodeError) as exc:
         msg = "Cannot verify retrieval skill ownership; files preserved. Check access and file encoding."
         raise ValueError(msg) from exc
@@ -354,7 +390,7 @@ def check_skill_cleanup(skills_dir: Path, binary: str) -> bool:
 
 
 def remove_skill(skills_dir: Path, binary: str, *, dry_run: bool = False) -> tuple[bool, str]:
-    """Remove only the verified packaged skill for ``binary``; never user edits or extras."""
+    """Remove a verified installation; preserve edits, extra entries and links."""
     if not check_skill_cleanup(skills_dir, binary):
         return False, ""
     directory = skill_path(skills_dir).parent
@@ -462,40 +498,47 @@ def _cmd_install_instruction(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_remove_instruction(args: argparse.Namespace) -> int:
-    # Ownership rejection must precede every instruction rewrite, including backups.
-    if args.skills_dir and (args.binary != "memu-hermes" or args.path == args.default_instruction_path):
-        check_skill_cleanup(Path(args.skills_dir), args.binary)
-    paths = [Path(args.path)]
-    if args.path == args.default_instruction_path:
-        paths.extend(Path(path) for path in args.legacy_paths)
+def cleanup(
+    paths: Iterable[Path], binary: str, *, skills_dir: Path | None = None, dry_run: bool = False
+) -> list[tuple[Path, bool, str]]:
+    """Remove discovered managed artifacts, independently of their installation version.
 
-    reported = False
+    Inspect the skill before touching instructions. Missing artifacts are no-ops;
+    the returned diffs let both human and JSON callers report actual removals.
+    """
+    if skills_dir is not None:
+        check_skill_cleanup(skills_dir, binary)
+    results = []
     seen: set[Path] = set()
     for path in paths:
         expanded = path.expanduser()
         if expanded in seen:
             continue
         seen.add(expanded)
-        changed, diff = remove(path, args.binary, dry_run=args.dry_run)
-        if not diff:
-            continue
-        reported = True
-        _report(expanded, changed, diff, dry_run=args.dry_run)
-
-    # The skill comes out after the instruction that points at it — the inverse of
-    # install's skill-first order (an instruction naming a skill that is not there
-    # is the one state that misleads an agent), so no live pointer ever dangles.
-    # Skill hosts only; inline hosts pass an empty --skills-dir and skip this.
-    if args.skills_dir and (args.binary != "memu-hermes" or args.path == args.default_instruction_path):
-        skills_dir = Path(args.skills_dir)
-        changed, diff = remove_skill(skills_dir, args.binary, dry_run=args.dry_run)
+        changed, diff = remove(expanded, binary, dry_run=dry_run)
         if diff:
-            reported = True
-            _report(skill_path(skills_dir), changed, diff, dry_run=args.dry_run)
+            results.append((expanded, changed, diff))
+    if skills_dir is not None:
+        changed, diff = remove_skill(skills_dir, binary, dry_run=dry_run)
+        if diff:
+            results.append((skill_path(skills_dir), changed, diff))
+    return results
 
-    if not reported:
-        print(f"{Path(args.path)}: no managed block to remove")
+
+def _cmd_remove_instruction(args: argparse.Namespace) -> int:
+    paths = [Path(args.path)]
+    if args.path == args.default_instruction_path:
+        paths.extend(Path(path) for path in args.legacy_paths)
+    skills_dir = (
+        Path(args.skills_dir)
+        if args.skills_dir and (args.binary != "memu-hermes" or args.path == args.default_instruction_path)
+        else None
+    )
+    results = cleanup(paths, args.binary, skills_dir=skills_dir, dry_run=args.dry_run)
+    for path, changed, diff in results:
+        _report(path, changed, diff, dry_run=args.dry_run)
+    if not results:
+        print(f"{Path(args.path)}: no managed artifacts to remove")
     return 0
 
 
@@ -565,7 +608,7 @@ def register(
         "remove-instruction",
         help=(
             "Remove memU's managed block from the host's global instruction file — and, on a "
-            "skill host, its verified packaged retrieval skill; user edits, extra files and links block cleanup"
+            "skill host, its verified retrieval skill; user edits, extra files and links block cleanup"
         ),
     )
     remover.add_argument("--path", default=path, help=f"Instruction file to unpatch (default: {path})")

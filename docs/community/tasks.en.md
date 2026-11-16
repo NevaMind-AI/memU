@@ -149,6 +149,33 @@ comparison; it does not expand this task's Claude Code implementation scope.
 - Cover historical names, coexisting registrations, preservation of unrelated tasks, and insufficient permissions in tests. Provide real-platform verification records with the OS version, registration scope, and permissions used.
 - Update the relevant CLI help and installation/uninstallation instructions.
 
+### Related Cleanup Follow-up for Other Hosts
+
+Local Windows validation for [PR #807](https://github.com/NevaMind-AI/memU/pull/807)
+also confirmed `memu-bridging-codex`, `memu-bridging-cursor` and
+`memu-bridging-pi` under `\memU\`. Read-only inspection of task actions and
+wrappers/prompts confirmed hourly host-specific prepare/agent/commit memorization
+pipelines, not retrieval skills. None was disabled or unregistered. This evidence
+is not successful cleanup acceptance, and task presence alone does not establish
+a previous uninstall failure.
+
+Track inspection and targeted removal of these confirmed legacy registrations
+as related task-003 follow-up, with scope, claims and acceptance confirmed
+separately by **host + platform**. Existing Claude Code platform subtasks remain
+unchanged. New evidence currently covers only Windows registrations for these
+three hosts; establish actual historical installations before adding locations
+on other platforms.
+
+- Reuse shared scheduler capabilities, but verify each host's own historical actions, wrappers, execution accounts and registration locations. Do not inherit another host's acceptance result.
+- Distinguish absent, present, inspection failed and removal failed in the CLI; read back after removal and preserve retry artifacts on failure. Provide read-only inspection and targeted removal, and explicitly report unhandled registrations during uninstall.
+- For running tasks, disable future triggers first and wait for the current run and descendants to finish naturally. Unregistration does not mean a process has stopped; do not terminate a user's running agent.
+- Preserve other hosts'/software's tasks, existing hooks, shared configuration and memory. Cover aliases, coexisting registrations, permission failures and repeated removal, with real-platform validation records.
+
+#807 implements instruction/skill ownership and cleanup and updates scheduler
+inspection guidance. It **does not complete automatic discovery, unregistration
+and readback acceptance of these real system tasks**. This section tracks future
+work, not implemented functionality or a task claim.
+
 **Historical record**: [#793](https://github.com/NevaMind-AI/memU/issues/793).
 
 <a id="task-004"></a>

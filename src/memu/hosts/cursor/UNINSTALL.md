@@ -1,5 +1,7 @@
 # Uninstall memU for Cursor
 
+<!-- memu-cleanup: owned-artifacts -->
+
 ## Task identity
 
 - Current task name: `{{task_name}}`
@@ -38,8 +40,10 @@ that entry:
 - **Unix (cron)** — the entry invokes `~/.memu/hosts/cursor/bridge.sh` (or, on
   installs predating the prompt-file layout, inlines
   `cursor-agent -p 'Run the memU bridging pipeline. …'` directly). Everything
-  else in the user's crontab is theirs and stays, e.g.
-  `crontab -l | grep -vE '{{task_name_pattern}}|hosts/cursor/bridge\.sh|memU bridging pipeline' | crontab -`.
+  else in the user's crontab is theirs and stays. Save the original crontab,
+  inspect the action/wrapper to confirm this host and remove only those exact
+  entries with `crontab -e`. Do not filter by a task name or generic pipeline
+  phrase that could also match another host.
   If the memU line was the only reason a `PATH=` line was added, that line may
   go too — but only if nothing else in the crontab needs it. If nothing at all
   remains, `crontab -r` removes the now-empty crontab cleanly.
@@ -79,10 +83,11 @@ Ask the user which projects memU was installed into if you cannot tell;
 `grep -l 'memu:begin' */AGENTS.md`-style searches from their project parent
 directories are a fair way to find stragglers.
 
-### ✅ Verify Part 2
+### Completion
 
-Each patched `AGENTS.md` shows no `memu:begin`/`memu:end` markers, and the
-user's own content is intact.
+Use the CLI exit status for each identified project. Exit 0 completes that file's
+cleanup; on a nonzero exit, stop and report the diagnostic. File checks, backups
+and deletion belong to the CLI.
 
 ---
 

@@ -1,29 +1,26 @@
 # Uninstall memU for Claude Code
 
+<!-- memu-cleanup: owned-artifacts -->
 <!-- memu-claude-install: cli-v1 -->
 
-For the removal Agent. Use the user's language and run:
+Run once and report the CLI result in the user's language:
 
 ```sh
 memu-claude-code uninstall --language en
 ```
 
-Use `--language zh` for Chinese. Wait for this command to exit and report its
-result. It removes only memU's retrieval and background memory hook definitions;
-it works without the Claude CLI. Other settings and integrations, memory, shared
-backend configuration, skills, CLAUDE.md, sessions, jobs, cursors, results and logs
-are preserved. Open a new Claude session to pick up the settings change.
+Use `--language zh` for Chinese. The command removes memU hooks and owned
+retrieval instructions/skills at the default paths, preserving user content,
+other integrations, shared configuration and memory. It works without Claude CLI.
 
-The user manages any previously configured memU schedules separately. Do not
-remove the package shared by other hosts or erase data as part of this command.
-Further cleanup requires an explicit user request.
+Exit 0 completes this command's cleanup. On a nonzero exit, stop and report the
+diagnostic. File checks and deletion belong to the CLI. Open a fresh Claude
+session to load the settings change.
 
-For separately requested legacy cleanup, preview `memu-claude-code
-remove-instruction --dry-run`. The command removes only a packaged retrieval
-skill with no extra entries or links; edited or server-refreshed skills are
-preserved for selective review. A rejected ownership check leaves both
-CLAUDE.md and the skill unchanged. Without `--dry-run`, confirmed owned entries
-are removed while unrelated instructions and other skills stay in place.
+Historical OS/native schedules are outside this command's coverage. Report any
+known remaining registrations separately; retain the executable while they need
+it. Schedule cleanup requires confirming this host's action, targeted removal
+and readback. Preserve other hosts' tasks and user memory.
 
 Legacy task names: current `{{task_name}}`; former {{former_task_names}};
 all recognized names: {{all_task_names}}.

@@ -1,5 +1,7 @@
 # Uninstall memU for OpenClaw
 
+<!-- memu-cleanup: owned-artifacts -->
+
 ## Task identity
 
 - Current task name: `{{task_name}}`
@@ -53,31 +55,13 @@ OpenClaw's cron job list no longer shows a memU bridging job.
 memu-openclaw remove-instruction
 ```
 
-It deletes memU's marked block from `~/.openclaw/workspace/AGENTS.md` and
-prints the diff. Everything outside the markers is the user's and survives;
-the previous contents are backed up to
-`~/.openclaw/workspace/AGENTS.md.bak` before the rewrite. `--dry-run` shows
-the diff without writing. Re-running is a clean no-op — a file with no block
-left is already the desired end state. If this install used a non-default
-workspace (`OPENCLAW_WORKSPACE_DIR`, or a profile), pass
-`--path <workspace>/AGENTS.md`.
+The CLI removes the owned retrieval instruction and skill, preserving user content
+and other skills. Exit 0 completes this step; on a nonzero exit, stop and report
+the diagnostic. File checks, backups and deletion belong to the CLI.
 
-The same command takes the skill the block pointed at out too — memU's own
-`memu-retrieve` directory under `~/.openclaw/skills/`. It comes out after the
-pointer, so nothing is ever left aiming at a deleted skill; the directory is
-memU's own (installed whole, so it goes whole), while a same-named directory
-without memU's `SKILL.md` and the user's or OpenClaw's other entries in
-`~/.openclaw/skills/` are left alone. So there is nothing to remove by hand. If
-this install used a non-default `OPENCLAW_STATE_DIR`, the skill sits under
-`<state-dir>/skills/` — pass `--skills-dir <state-dir>/skills` so removal finds
-it.
-
-### ✅ Verify Part 2
-
-`cat ~/.openclaw/workspace/AGENTS.md` — no `memu:begin`/`memu:end` markers
-remain, and the user's own content is intact. `~/.openclaw/skills/memu-retrieve`
-no longer exists. A session already running loaded the old file; a fresh session
-is what picks the removal up.
+For a known custom workspace or state directory, pass
+`--path <workspace>/AGENTS.md` and `--skills-dir <state-dir>/skills` as applicable.
+Start a fresh session to unload instructions already in context.
 
 ---
 

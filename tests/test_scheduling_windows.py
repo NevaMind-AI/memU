@@ -521,7 +521,7 @@ def test_openclaw_task_recreates_confirmed_bridge() -> None:
         (
             "cursor",
             ("$HOME/.memu/hosts/cursor/bridge.sh", "{{task_name}}"),
-            ("hosts/cursor/bridge\\.sh|memU bridging pipeline", "schedule uninstall"),
+            ("hosts/cursor/bridge.sh", "cursor-agent -p", "schedule uninstall"),
         ),
         (
             "hermes",
@@ -543,6 +543,13 @@ def test_os_scheduler_identity_docs_stay_aligned(
         assert signal in task_doc
     for signal in uninstall_signals:
         assert signal in uninstall_doc
+    if pkg == "cursor":
+        normalized = " ".join(uninstall_doc.split())
+        assert "inspect the action/wrapper to confirm this host" in normalized
+        assert "remove only those exact entries" in normalized
+        assert "`crontab -e`" in normalized
+        assert "could also match another host" in normalized
+        assert "grep -vE" not in uninstall_doc
 
 
 def test_native_scheduler_identity_docs_stay_explicit() -> None:
