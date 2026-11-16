@@ -16,9 +16,7 @@ from memu.hosts.codex.cli import main as codex_main
 from memu.hosts.pi.cli import main as pi_main
 
 
-@pytest.mark.parametrize(
-    "binary", ["memu-codex", "memu-claude-code", "memu-pi", "memu-hermes", "memu-openclaw", "memu-cola"]
-)
+@pytest.mark.parametrize("binary", ["memu-codex", "memu-claude-code", "memu-pi", "memu-hermes", "memu-openclaw"])
 def test_recorded_server_skill_survives_package_changes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, binary: str
 ) -> None:
@@ -160,9 +158,7 @@ def test_receipt_allows_future_optional_fields(tmp_path: Path) -> None:
     assert instruction.remove_skill(tmp_path, "memu-codex")[0]
 
 
-@pytest.mark.parametrize(
-    "host", ["codex", "claude_code", "pi", "hermes", "openclaw", "cola", "workbuddy", "cursor", "generic"]
-)
+@pytest.mark.parametrize("host", ["codex", "claude_code", "pi", "hermes", "openclaw", "workbuddy", "cursor"])
 def test_remote_uninstall_guides_need_the_cleanup_capability(host: str) -> None:
     spec = importlib.import_module(f"memu.hosts.{host}.cli").SPEC
     embedded = files(spec.package).joinpath("UNINSTALL.md").read_text(encoding="utf-8")

@@ -361,10 +361,6 @@ AGENT_PLATFORMS: dict[str, str] = {
     # `HostSpec.host` is also the on-disk directory name, so it is not free to
     # change; the mapping happens at the envelope boundary instead.
     "claude-code": "claude_code",
-    # The generic adapter's host id is `agent` (its binary is `memu-agent`).
-    # "agent" is meaningless as an analytics dimension; ADR 0011's own name for
-    # it is the generic adapter.
-    "agent": "generic",
 }
 """Explicit, not a hopeful string transformation. Anything unlisted falls back to
 hyphen-to-underscore, and an absent host (the core ``memu`` binary, which has no

@@ -147,9 +147,6 @@ def test_agent_platform_is_normalised_not_passed_through(reporting: pathlib.Path
     # `claude-code` is also the on-disk directory name, so the mapping has to
     # happen here rather than by renaming the host.
     assert events.agent_platform("claude-code") == "claude_code"
-    # The generic adapter's host id is `agent`; "agent" is meaningless as a
-    # platform dimension.
-    assert events.agent_platform("agent") == "generic"
     assert events.agent_platform("codex") == "codex"
     # The core `memu` binary has no host at all.
     assert events.agent_platform("") == "none"
