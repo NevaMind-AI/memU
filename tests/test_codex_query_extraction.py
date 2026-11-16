@@ -216,7 +216,7 @@ def test_hook_retrieves_extracted_query_with_shared_deadline(tmp_path, monkeypat
     assert seen[0]["input"] == b"Windows hook WinError 206"
     assert 0 < seen[0]["timeout"] <= 37
     assert "completed successfully" in capsys.readouterr().out
-    trace = json.loads(next((tmp_path / "log/hooks/retrieve").glob("*.log")).read_text().splitlines()[-1])
+    trace = json.loads(next((tmp_path / "log/hooks/retrieve").glob("*.json")).read_text(encoding="utf-8"))
     assert trace["query_source"] == "extracted"
     assert trace["query_truncated"] is False
     assert prompt not in json.dumps(trace)

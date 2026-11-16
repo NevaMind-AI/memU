@@ -4,6 +4,7 @@ import io
 import json
 import subprocess
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -43,14 +44,19 @@ def test_prompt_hook_preserves_query_and_logs(tmp_path, monkeypatch, capsys, out
         return subprocess.CompletedProcess(argv, 0, json.dumps(memories).encode("utf-8"), b"")
 
     monkeypatch.setattr(prompt_hook.subprocess, "run", retrieve)
+    before = datetime.now(UTC)
     assert main(["prompt-hook"]) == 0
+    after = datetime.now(UTC)
     output = capsys.readouterr()
-    logs = list((tmp_path / ".memu/hosts/codex/log/hooks/retrieve").glob("*.log"))
+    logs = list((tmp_path / ".memu/hosts/codex/log/hooks/retrieve").glob("*.json"))
     assert not (tmp_path / ".memu/hosts/codex/log/hooks/memorize").exists()
     assert len(logs) == 1
-    records = [json.loads(line) for line in logs[0].read_text(encoding="utf-8").splitlines()]
-    assert records[0]["status"] == "started"
-    final = records[-1]
+    text = logs[0].read_text(encoding="utf-8")
+    final = json.loads(text)
+    observed_at = datetime.fromisoformat(final["observed_at"])
+    assert observed_at.utcoffset() == UTC.utcoffset(None)
+    assert before <= observed_at <= after
+    assert text == json.dumps(final, ensure_ascii=False, indent=2) + "\n"
     if "retrieve_result" in final:
         assert final["returned_counts"] == final["counts"]
         assert final["omitted_counts"] == {"hits": 0, "resources": 0}
@@ -126,8 +132,8 @@ def test_prompt_hook_empty_and_invalid_input(tmp_path, monkeypatch, capsys, prom
     assert main(["prompt-hook"]) == 0
     assert not calls
     assert not capsys.readouterr().out
-    log = next((tmp_path / ".memu/hosts/codex/log/hooks/retrieve").glob("*.log"))
-    final = json.loads(log.read_text(encoding="utf-8").splitlines()[-1])
+    log = next((tmp_path / ".memu/hosts/codex/log/hooks/retrieve").glob("*.json"))
+    final = json.loads(log.read_text(encoding="utf-8"))
     assert final["status"] == ("empty_prompt" if prompt == "" else "failed")
 
 
@@ -161,5 +167,5 @@ def test_extracted_query_is_injected_verbatim(tmp_path, monkeypatch, capsys):
         "extraction_status": "succeeded",
         "query_kind": "extracted",
     }
-    log = next((tmp_path / ".memu/hosts/codex/log/hooks/retrieve").glob("*.log"))
-    assert json.loads(log.read_text(encoding="utf-8").splitlines()[-1])["query"] == query
+    log = next((tmp_path / ".memu/hosts/codex/log/hooks/retrieve").glob("*.json"))
+    assert json.loads(log.read_text(encoding="utf-8"))["query"] == query

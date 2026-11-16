@@ -32,7 +32,6 @@ import sys
 from memu.hosts import hooks
 from memu.hosts.codex import (
     cli_prepare,
-    hook_status,
     install,
     memorize_hook,
     notify_console,
@@ -80,7 +79,6 @@ def _register_extra(sub: object) -> None:
     cli_prepare.register(sub)
     prompt_hook.register(sub)
     memorize_hook.register(sub)
-    hook_status.register(sub)
     prompt_hook_install.register(sub)
 
 

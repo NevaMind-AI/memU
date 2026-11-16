@@ -33,6 +33,7 @@ def test_submit_injects_own_worker_snapshot(tmp_path, monkeypatch, capsys, statu
     assert snapshot["log"] == str(path)
     assert snapshot["observed_at"]
     assert "do not proactively announce" in context
+    assert "hook-status" not in context
     if status == "cooldown":
         assert snapshot["cooldown_remaining_minutes"] == 29
 
