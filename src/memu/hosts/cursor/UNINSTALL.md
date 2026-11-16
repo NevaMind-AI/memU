@@ -83,10 +83,11 @@ Ask the user which projects memU was installed into if you cannot tell;
 `grep -l 'memu:begin' */AGENTS.md`-style searches from their project parent
 directories are a fair way to find stragglers.
 
-### ✅ Verify Part 2
+### Completion
 
-Each patched `AGENTS.md` shows no `memu:begin`/`memu:end` markers, and the
-user's own content is intact.
+Use the CLI exit status for each identified project. Exit 0 completes that file's
+cleanup; on a nonzero exit, stop and report the diagnostic. File checks, backups
+and deletion belong to the CLI.
 
 ---
 

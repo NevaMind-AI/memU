@@ -1,35 +1,24 @@
 # Uninstall memU for pi
 
 <!-- memu-cleanup: owned-artifacts -->
-
 <!-- memu-pi-install: extension-v1 -->
 <!-- {{task_name}} | {{former_task_names}} | {{all_task_names}} -->
+
+Run once using the same `PI_CODING_AGENT_DIR` as installation:
 
 ```sh
 memu-pi uninstall
 ```
 
-Use the same `PI_CODING_AGENT_DIR` if pi uses a custom agent directory. The CLI
-removes memU's extension, managed blocks in both `AGENTS.md` and
-`AGENTS.override.md`, and its verified retrieval skill under `skills/memu-retrieve`.
-It preserves unrelated instructions, skills, pi settings, sessions, shared memory
-and working files. Ownership is checked before removing the extension. Stop on
-a nonzero exit and report the path needing review.
+The command removes memU's extension and owned retrieval instructions/skills,
+including both global AGENTS filenames. Other instructions, skills, settings,
+sessions, shared memory and working files are preserved.
 
-On exit 0, accept the CLI result; do not inspect AGENTS.md, SKILL.md or ownership
-records, or run retrieval-only cleanup afterward. On a nonzero exit, stop and
-report the diagnostic, investigating only the reported failure. Do not bypass
-ownership checks by deleting files manually.
+Exit 0 completes this command's cleanup. On a nonzero exit, stop and report the
+diagnostic. File checks and deletion belong to the CLI. Run `/reload` or close
+the pi session to unload the extension; an active memory worker may finish its pass.
 
-Only if the user explicitly identifies a custom historical location, run
-`memu-pi remove-instruction --path <file> --skills-dir <dir>` for that location.
-Otherwise skip this step; do not search other profiles for hypothetical residue.
-
-Inspect old OS bridge schedules (cron/launchd on Unix, Task Scheduler on Windows).
-Confirm each registration runs this host's prepare/agent/commit pipeline, remove
-only that exact entry and verify absence. Do not match all hosts by a generic
-pipeline phrase or task name alone. The command does not enumerate schedulers;
-report unresolved entries and retain their executable until resolved.
-
-Run `/reload` in pi or close the session to unload the extension. An already
-running memory worker may finish its current pass.
+Historical OS schedules are outside this command's coverage. Report any known
+remaining registrations separately; retain their executable while needed.
+Schedule cleanup requires confirming this host's action, targeted removal and
+readback. Preserve other hosts' tasks and user memory.

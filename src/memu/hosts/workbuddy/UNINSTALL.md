@@ -53,19 +53,10 @@ The automation no longer appears in WorkBuddy's automation list.
 memu-workbuddy remove-instruction
 ```
 
-It deletes memU's marked block from `~/.workbuddy/SOUL.md` and also checks the
-former `~/.workbuddy/MEMORY.md` target so an older install is removed cleanly.
-Everything outside the markers is the user's and survives; each changed file is
-backed up to its adjacent `.bak` path before the rewrite. `--dry-run` shows both
-diffs without writing. Re-running is a clean no-op — files with no block left are
-already the desired end state.
-
-### ✅ Verify Part 2
-
-Check both `cat ~/.workbuddy/SOUL.md` and `cat ~/.workbuddy/MEMORY.md`: no
-`memu:begin`/`memu:end` markers remain, and the user's own content is intact. The
-session you are working in already loaded the old file, so the instruction may
-still be in your own context; a fresh session is what picks the removal up.
+The CLI removes its managed blocks from the current and legacy instruction
+files, preserving user content. Exit 0 completes this step; on a nonzero exit,
+stop and report the diagnostic. File checks, backups and deletion belong to the
+CLI. Start a fresh session to unload instructions already in context.
 
 ---
 

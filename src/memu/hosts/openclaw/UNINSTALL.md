@@ -55,33 +55,13 @@ OpenClaw's cron job list no longer shows a memU bridging job.
 memu-openclaw remove-instruction
 ```
 
-It deletes memU's marked block from `~/.openclaw/workspace/AGENTS.md` and
-prints the diff. Everything outside the markers is the user's and survives;
-the previous contents are backed up to
-`~/.openclaw/workspace/AGENTS.md.bak` before the rewrite. `--dry-run` shows
-the diff without writing. Re-running is a clean no-op — a file with no block
-left is already the desired end state. If this install used a non-default
-workspace (`OPENCLAW_WORKSPACE_DIR`, or a profile), pass
-`--path <workspace>/AGENTS.md`.
+The CLI removes the owned retrieval instruction and skill, preserving user content
+and other skills. Exit 0 completes this step; on a nonzero exit, stop and report
+the diagnostic. File checks, backups and deletion belong to the CLI.
 
-The same command removes the verified `memu-retrieve` directory under
-`~/.openclaw/skills/` after its instruction pointer. Installation/refresh records
-the host and content fingerprint in `.memu-owned.json`, so unchanged recorded
-skills remain removable across package/server-template updates. Unrecorded skills
-must match packaged content. Edits, extra entries, missing markers, links or
-invalid records stop cleanup before instructions change; report the diagnostic
-and review ownership instead of deleting a directory manually. Other skills stay
-intact. If
-this install used a non-default `OPENCLAW_STATE_DIR`, the skill sits under
-`<state-dir>/skills/` — pass `--skills-dir <state-dir>/skills` so removal finds
-it.
-
-### ✅ Verify Part 2
-
-`cat ~/.openclaw/workspace/AGENTS.md` — no `memu:begin`/`memu:end` markers
-remain, and the user's own content is intact. `~/.openclaw/skills/memu-retrieve`
-no longer exists. A session already running loaded the old file; a fresh session
-is what picks the removal up.
+For a known custom workspace or state directory, pass
+`--path <workspace>/AGENTS.md` and `--skills-dir <state-dir>/skills` as applicable.
+Start a fresh session to unload instructions already in context.
 
 ---
 

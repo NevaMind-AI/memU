@@ -45,10 +45,9 @@ instruction file exactly as they are.
 
 ### 1.1 Current entries — UserPromptSubmit hooks
 
-First follow Part 2.1 to remove both memU Submit handlers and their approvals.
-In particular, remove `memorize-hook` before waiting for running agents; leaving
-it registered allows new user submissions to start more workers. Use the CLI
-result as evidence; it preserves unrelated handlers.
+First run the command in Part 2 to remove both memU Submit handlers before
+waiting for active agents. Use its result as evidence; the CLI preserves unrelated
+handlers.
 
 ### 1.2 Historical entries — scheduled bridging tasks
 
@@ -79,38 +78,22 @@ hooks and hosts remain intact. Repeating the removal is a no-op.
 
 ---
 
-## Part 2 — Remove the Submit hooks, trust and old instruction
+## Part 2 — CLI cleanup result
 
-### 2.1 Run the CLI once
-
-If Part 1.1 already ran this command successfully, do not run it again:
+Run the command once, or use its successful result from Part 1.1:
 
 ```text
 memu-codex uninstall
 ```
 
-The CLI handles hook removal, trust preservation, backups and owned retrieval
-instruction/skill cleanup at the default paths. A successful exit completes this
-step: do not inspect AGENTS.md, SKILL.md, ownership records or hook configuration,
-and do not run `remove-instruction` afterward to double-check the CLI.
+It removes memU hooks and owned retrieval instructions/skills at the default
+paths, preserving unrelated hooks, user content, shared configuration and memory.
+Exit 0 completes this step. On a nonzero exit, stop and report the diagnostic.
+File checks, trust handling, backups and deletion belong to the CLI.
 
-On a nonzero exit, stop and report the diagnostic. Investigate only the reported
-failure; do not delete files or edit trust state to bypass ownership checks.
-
-### 2.2 Only for an explicitly known custom installation
-
-If the user identifies a historical instruction/skills location outside the
-command's default paths, use
-`memu-codex remove-instruction --path <file> --skills-dir <dir>` for that location.
-Otherwise skip this subsection. Do not
-search other profiles or workspaces merely because an older integration might
-have existed. Preserve unrelated user content and other hosts.
-
-### ✅ Verify Part 2
-
-Use the command exit status and diagnostic as the completion evidence. No extra
-file inspection or retrieval smoke test is required. Start a fresh Codex session
-to unload instructions already in context; this need not delay removal completion.
+For an explicitly identified custom installation, pass its paths to
+`memu-codex remove-instruction --path <file> --skills-dir <dir>`.
+Start a fresh session to unload instructions already in context.
 
 ---
 
