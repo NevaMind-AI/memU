@@ -140,13 +140,6 @@ Installation is the one-message setup in [Quick start](#quick-start) or [Self-ho
 Afterwards `<binary> doctor` proves the whole loop resolves: config, selected
 mode, and a live retrieval.
 
-Codex retrieval hook traces are stored in `~/.memu/hosts/codex/log/hooks/retrieve/`
-(customizable with `prompt-hook --base-dir`). Each `<UUID>.json` includes an
-`observed_at` UTC invocation timestamp, including failed invocations when the trace
-can be written, so diagnostics retain the start time independently of the filename.
-Traces are written after retrieval; logging failures are reported to stderr and do
-not prevent retrieval or retract context already delivered.
-
 Adding another host means implementing one `TranscriptSource` (where its session logs live, how its records are shaped) plus a `HostSpec`-sized CLI — the pipeline, verbs, and instruction text are shared.
 
 ## Developer integration
