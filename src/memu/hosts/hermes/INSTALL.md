@@ -19,6 +19,10 @@ installation updates the block in place while preserving other SOUL.md content.
 The integration patches the instruction file and uses subprocess CLI commands;
 it does not load Hermes's Python modules or require Hermes v0.23.1.
 
+On exit 0, installation is complete. Do not read SOUL.md, SKILL.md, plugin files
+or ownership records, and do not run extra cleanup or activation probes. On a
+nonzero exit, report the CLI diagnostic and stop; investigate only that failure.
+
 For a new backend, pass `--backend cloud --cloud-api-key <key>` or
 `--backend local --db <absolute-path>` with embedding settings. See
 `memu-hermes install --help`.
@@ -55,14 +59,16 @@ memu-hermes install-instruction
 memu-hermes remove-instruction
 ```
 
-Default-path instruction installation removes a verified legacy
-`memu-retrieve` skill after writing the inline procedure. Edited skills, extra
-files, or linked paths are preserved and require ownership review; full install
-and uninstall check this before changing lifecycle integration. `--path` can target a separate SOUL.md
-without cleaning another profile's skills. Full `install` also handles legacy
-plugin and schedule migration; `install-instruction` only patches instructions.
+The full installer handles legacy retrieval cleanup and verifies it internally.
+The commands above are only for explicitly requested instruction-only maintenance;
+do not run them after successful installation. `--path` selects a separate SOUL.md.
 
-## Legacy cleanup
+## Separately requested legacy schedule maintenance
+
+Do not run the following checks after a successful default installation. Use
+this section only when the user identifies a legacy schedule to remove or a CLI
+diagnostic explicitly requires it. Do not block a successful install on a search
+for hypothetical historical registrations.
 
 On Windows, install and uninstall inspect tasks under `\memU\` using recognized
 task names, expected PowerShell wrapper action, and working directory. Errors

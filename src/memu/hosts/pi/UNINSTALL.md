@@ -16,13 +16,14 @@ It preserves unrelated instructions, skills, pi settings, sessions, shared memor
 and working files. Ownership is checked before removing the extension. Stop on
 a nonzero exit and report the path needing review.
 
-Skill installation/refresh records the host and content fingerprint in
-`.memu-owned.json`. Unchanged recorded content remains removable across template
-and package changes. Unrecorded skills must match the packaged content; edits,
-extra files, links or invalid records require ownership review. Do not delete an
-ambiguous directory to bypass this check. For custom historical locations, preview
-`memu-pi remove-instruction --path <file> --skills-dir <dir> --dry-run`, then apply
-without `--dry-run` after review.
+On exit 0, accept the CLI result; do not inspect AGENTS.md, SKILL.md or ownership
+records, or run retrieval-only cleanup afterward. On a nonzero exit, stop and
+report the diagnostic, investigating only the reported failure. Do not bypass
+ownership checks by deleting files manually.
+
+Only if the user explicitly identifies a custom historical location, run
+`memu-pi remove-instruction --path <file> --skills-dir <dir>` for that location.
+Otherwise skip this step; do not search other profiles for hypothetical residue.
 
 Inspect old OS bridge schedules (cron/launchd on Unix, Task Scheduler on Windows).
 Confirm each registration runs this host's prepare/agent/commit pipeline, remove

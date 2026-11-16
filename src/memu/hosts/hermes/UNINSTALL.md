@@ -13,17 +13,15 @@ Use the same `HERMES_HOME` as the installed Hermes profile. Uninstall removes
 memU's managed SOUL.md block, memorize shell-hook entry and its exact allowlist
 approval, and legacy `memu-retrieve` skill. Other SOUL.md
 content, sessions, shared memory, working files, and unrelated settings are kept.
-Repeating uninstall is safe. Skills installed/refreshed with `.memu-owned.json`
-are verified by host and content fingerprint, independent of package/template
-version. Unrecorded skills must match packaged content. Edits, extra files,
-links and invalid records stop cleanup for ownership review; do not bypass the
-check by deleting a directory manually.
+Repeating uninstall is safe. The CLI owns file checks and cleanup. On exit 0,
+accept its result; do not inspect SOUL.md, SKILL.md, ownership records or plugin
+files, and do not run `remove-instruction` afterward. On a nonzero exit, stop and
+report the diagnostic; investigate only the reported failure without bypassing
+ownership checks by deleting files manually.
 
-A legacy `memu-memory` plugin is inspected for ownership, then removed through
-`hermes plugins remove memu-memory`. Directory absence is checked afterward.
-Unknown files, symlinks, CLI errors, or incomplete removal stop the operation.
-No Hermes Python modules are loaded. Start a fresh session to refresh SOUL.md;
-restart running Hermes processes after legacy plugin removal.
+The CLI also handles legacy plugin removal and verifies its result. No Hermes
+Python modules are loaded. Start a fresh session to refresh SOUL.md; restart
+running Hermes processes if the command reports legacy plugin removal.
 
 Use `memu-hermes remove-instruction` to remove only the retrieval instruction
 and legacy skill without full plugin/schedule cleanup.

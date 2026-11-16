@@ -17,13 +17,11 @@ it works without the Claude CLI. User instructions outside the managed block,
 other skills/settings, memory, shared backend configuration, sessions, jobs,
 cursors, results and logs are preserved. Open a new Claude session afterward.
 
-The command checks retrieval skill ownership before changing hooks or instructions.
-Installation and refresh record the actual skill content in `.memu-owned.json`;
-unchanged recorded skills can be removed across package and server-template updates.
-Unrecorded skills must match the packaged content. Edited content, extra files,
-links or invalid records stop cleanup with a nonzero exit and a diagnostic;
-inspect the reported path and do not bypass the check by deleting the directory.
-`memu-claude-code remove-instruction --dry-run` previews retrieval-only cleanup.
+The CLI performs ownership checks and cleanup. On exit 0, accept its result;
+do not read CLAUDE.md, SKILL.md or ownership records, run `remove-instruction`,
+or repeat filesystem checks after success. On a nonzero exit, stop and report
+the diagnostic; investigate only the reported path and do not bypass the check
+by deleting files manually.
 
 Also inspect any previously configured memU schedules. Confirm this host's
 prepare/agent/commit action before removing each exact registration, then verify

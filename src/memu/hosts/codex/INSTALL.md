@@ -57,6 +57,10 @@ store/provider/model identity and respect configuration-change refusals.
 
 ## Report the result
 
+After CLI success, do not inspect instruction/skill files or run extra cleanup
+commands. Use the CLI result as completion evidence; no additional file checks
+are required. Investigate only a failure reported by the CLI.
+
 Use this compact report on success. Keep the emoji and Markdown heading, translate
 the text into the user's language, and fill values only from actual CLI results:
 

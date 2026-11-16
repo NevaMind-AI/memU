@@ -158,6 +158,17 @@ def test_receipt_allows_future_optional_fields(tmp_path: Path) -> None:
     assert instruction.remove_skill(tmp_path, "memu-codex")[0]
 
 
+@pytest.mark.parametrize("host", ["codex", "claude_code", "pi", "hermes"])
+@pytest.mark.parametrize("filename", ["INSTALL.md", "UNINSTALL.md"])
+def test_cli_lifecycle_guides_do_not_require_duplicate_file_checks(host: str, filename: str) -> None:
+    text = files(f"memu.hosts.{host}").joinpath(filename).read_text(encoding="utf-8")
+    normalized = " ".join(text.split()).lower()
+    assert "do not inspect" in normalized or "do not read" in normalized
+    assert "diagnostic" in normalized
+    if filename == "UNINSTALL.md":
+        assert "exit 0" in normalized or "successful exit" in normalized
+
+
 @pytest.mark.parametrize("host", ["codex", "claude_code", "pi", "hermes", "openclaw", "workbuddy", "cursor"])
 def test_remote_uninstall_guides_need_the_cleanup_capability(host: str) -> None:
     spec = importlib.import_module(f"memu.hosts.{host}.cli").SPEC
