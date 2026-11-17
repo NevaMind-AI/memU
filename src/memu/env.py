@@ -184,6 +184,14 @@ def embedding_profile() -> dict[str, Any]:
     for key, var in (("embed_model", "MEMU_EMBED_MODEL"), ("base_url", "MEMU_BASE_URL"), ("api_key", "MEMU_API_KEY")):
         if value := env(var):
             profile[key] = value
+    if value := env("MEMU_EMBED_BATCH_SIZE"):
+        try:
+            batch_size = int(value)
+        except ValueError as exc:
+            raise ConfigError("MEMU_EMBED_BATCH_SIZE", "must be a positive integer") from exc
+        if batch_size < 1:
+            raise ConfigError("MEMU_EMBED_BATCH_SIZE", "must be a positive integer")
+        profile["embed_batch_size"] = batch_size
     return profile
 
 
