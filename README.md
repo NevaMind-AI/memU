@@ -210,6 +210,7 @@ For Local / self-hosted installations, every CLI flag has a matching variable:
 | Embedding provider | `MEMU_EMBED_PROVIDER` | `openai` (also: `jina`, `voyage`, `doubao`, `openrouter`); legacy `MEMU_LLM_PROVIDER` still read |
 | API key | `MEMU_API_KEY` | the provider's env var, e.g. `OPENAI_API_KEY` |
 | Embedding model | `MEMU_EMBED_MODEL` | the provider's default |
+| Embedding batch size | `MEMU_EMBED_BATCH_SIZE` | provider default (64); lower it for providers that cap inputs per request, e.g. `10` for DashScope |
 | Base URL | `MEMU_BASE_URL` | the provider's default |
 
 Run `<binary> doctor` to display the resolved mode and verify the same retrieval
