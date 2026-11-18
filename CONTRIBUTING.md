@@ -27,9 +27,8 @@ the discussion step below. See the catalog's participation guide before starting
 ## 🚀 Quick Start for Contributors
 
 ### Prerequisites
-- Python 3.11+
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) (manages Python and project dependencies)
 - Git
-- [uv](https://github.com/astral-sh/uv) (Python package manager)
 - A code editor (VS Code recommended)
 
 ### Development Setup
@@ -43,12 +42,17 @@ cd MemU
 # 3. Install uv if you haven't already
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# 4. Install development dependencies and pre-commit hooks
-make install
+# 4. Prepare the project environment and pre-commit hooks
+uv sync --python 3.13
+uv run pre-commit install
 
 # 5. Verify setup by running tests
-make test
+uv run python -m pytest
 ```
+
+uv downloads Python 3.13 if needed. Run Python tools and project commands through
+`uv run` (for example, `uv run memu-pi --help`) so they use the checked-out source
+and project environment. The Makefile commands below are shortcuts around uv.
 
 ### Available Commands
 
@@ -57,6 +61,25 @@ make install           # Create virtual environment and install dependencies wit
 make test              # Run tests with pytest and coverage
 make check             # Run all checks (lock file, pre-commit, mypy, deptry)
 ```
+
+## 📚 Documentation
+
+The documentation site has [English](docs/site/index.md) and [简体中文](docs/site/zh/index.md) sources.
+Use Node.js 22.12+ and pnpm 11.15.1 to run it locally from the repository root:
+
+```sh
+pnpm --dir docs install --frozen-lockfile
+pnpm --dir docs dev
+# Production build and preview:
+pnpm --dir docs build
+pnpm --dir docs preview
+```
+
+Update the guide or reference that owns the changed behavior, together with its translation.
+Keep the README focused on the project introduction and setup entry points. The
+[documentation guide](docs/site/development/documentation.md) explains page ownership,
+existing ADR and host guide sources, navigation, and validation. In your PR, list the
+updated documentation or explain why it is unaffected.
 
 ## 🔧 Development Guidelines
 

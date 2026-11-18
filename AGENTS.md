@@ -65,7 +65,9 @@ Useful focused areas:
 
 ## Documentation Rules
 
-- Update `README.md` or `npm/README.md` when user-visible behavior changes.
+- Update the relevant guide or reference under `docs/site/` when user-visible behavior changes; see [the documentation guide](docs/site/development/documentation.md) for ownership and local preview commands. Update `README.md` or `npm/README.md` when the introduction, installation entry point, or package usage changes.
+- Keep English site pages and their `docs/site/zh/` counterparts aligned, and add new pages to both sidebars in `docs/.vitepress/config.ts`.
+- Run `pnpm --dir docs build` for site changes; fix broken links before submitting. Keep host install/task/uninstall guides in `src/memu/hosts/` as CLI package resources.
 - Add or update ADRs under `docs/adr/` for architectural changes; existing ADRs are historical records — do not rewrite them.
 - When changing either language of a Chinese/English document pair, update the other in the same PR; keep task IDs, anchors, scope, status, and acceptance criteria aligned (for example, `docs/community/tasks.md` and `docs/community/tasks.en.md`).
 - Do not document speculative features as implemented.

@@ -1,0 +1,17 @@
+{
+  "name": "memu-docs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vitepress dev",
+    "build": "vitepress build",
+    "preview": "vitepress preview"
+  },
+  "packageManager": "pnpm@11.15.1",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "devDependencies": {
+    "vitepress": "1.6.4"
+  }
+}

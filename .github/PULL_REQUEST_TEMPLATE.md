@@ -31,7 +31,8 @@ Please check what applies:
 
 - [ ] PR title follows an allowed format (for example `feat:`, `fix:`, `docs:`, `memory base:`)
 - [ ] Changes are limited in scope and easy to review
-- [ ] Documentation updated where applicable
+- [ ] Relevant guide/reference and its translation updated, or the reason documentation is unaffected is explained
+- [ ] Documentation build passes (`pnpm --dir docs build`) when site content or configuration changes
 - [ ] No breaking changes (or clearly documented)
 - [ ] Related issues or discussions linked
 
