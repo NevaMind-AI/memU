@@ -29,7 +29,7 @@ def cosine_topk(
         return []
 
     q = np.asarray(query_vec, dtype=np.float32)
-    if q.ndim != 1 or q.size == 0:
+    if q.ndim != 1 or q.size == 0 or not np.isfinite(q).all():
         return []
     dim = q.size
 
@@ -53,7 +53,15 @@ def cosine_topk(
         return []
 
     # Vectorized computation: stack all vectors into a matrix
-    matrix = np.array(vecs, dtype=np.float32)  # shape: (n, dim)
+    with np.errstate(over="ignore"):
+        matrix = np.array(vecs, dtype=np.float32)  # shape: (n, dim)
+    # Check after the cast so values that overflow float32 are excluded too.
+    finite_rows = cast(np.ndarray, np.isfinite(matrix).all(axis=1))
+    if not finite_rows.all():
+        matrix = matrix[finite_rows]
+        ids = [row_id for row_id, keep in zip(ids, finite_rows, strict=True) if keep]
+        if not ids:
+            return []
 
     # Compute all cosine similarities at once
     q_norm = np.linalg.norm(q)
