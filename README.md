@@ -198,10 +198,6 @@ For Local / self-hosted installations, every CLI flag has a matching variable:
 Run `<binary> doctor` to display the resolved mode and verify the same retrieval
 path the host uses.
 
-Local embedding URLs automatically bypass environment proxies for loopback IPs,
-`localhost`, and `*.localhost`, including names with a single trailing DNS root
-dot (`localhost.`). An explicit `MEMU_HTTP_PROXY` still takes precedence.
-
 ### Storage backends
 
 | Provider | DSN | Vector search | Use for |

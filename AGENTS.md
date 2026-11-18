@@ -65,7 +65,6 @@ Useful focused areas:
 
 ## Documentation Rules
 
-- Update `README.md` or `npm/README.md` when user-visible behavior changes.
 - Add or update ADRs under `docs/adr/` for architectural changes; existing ADRs are historical records — do not rewrite them.
 - When changing either language of a Chinese/English document pair, update the other in the same PR; keep task IDs, anchors, scope, status, and acceptance criteria aligned (for example, `docs/community/tasks.md` and `docs/community/tasks.en.md`).
 - Do not document speculative features as implemented.
