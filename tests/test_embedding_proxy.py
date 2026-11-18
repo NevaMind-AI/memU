@@ -49,6 +49,8 @@ def _clean_proxy_env(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) ->
         "http://localhost:11434/v1",
         "http://LOCALHOST:11434/v1",
         "http://ollama.localhost/v1",
+        "http://localhost.:11434/v1",
+        "http://ollama.localhost./v1",
         "http://127.0.0.1:11434/v1",
         "http://127.5.5.5/v1",
         "http://[::1]:11434/v1",
@@ -65,6 +67,9 @@ def test_loopback_urls_are_recognized(url: str) -> None:
         "http://192.168.1.23:11434/v1",
         "http://host.docker.internal:11434/v1",
         "http://localhost.evil.com/v1",
+        "http://localhost.evil.com./v1",
+        "http://localhost../v1",
+        "http://127.0.0.1./v1",
         "",
     ],
 )
@@ -237,6 +242,36 @@ async def _json_server(payload: dict) -> tuple[asyncio.Server, int]:
 
     server = await asyncio.start_server(handle, "127.0.0.1", 0)
     return server, server.sockets[0].getsockname()[1]
+
+
+@pytest.mark.parametrize("client_type", [HTTPEmbeddingClient, OpenAIEmbeddingSDKClient])
+@pytest.mark.parametrize("host", ["localhost", "localhost."])
+@pytest.mark.parametrize("explicit_proxy", [False, True])
+async def test_localhost_proxy_routing(
+    monkeypatch: pytest.MonkeyPatch,
+    client_type: type[HTTPEmbeddingClient] | type[OpenAIEmbeddingSDKClient],
+    host: str,
+    explicit_proxy: bool,
+) -> None:
+    def payload(vector: list[float]) -> dict:
+        return {"data": [{"object": "embedding", "index": 0, "embedding": vector}]}
+
+    server, port = await _json_server(payload([3.0, 4.0]))
+    proxy, proxy_port = await _json_server(payload([9.0, 9.0]))
+    monkeypatch.setenv("HTTP_PROXY", f"http://127.0.0.1:{proxy_port}")
+    if explicit_proxy:
+        monkeypatch.setenv("MEMU_HTTP_PROXY", f"http://127.0.0.1:{proxy_port}")
+    client = client_type(base_url=f"http://{host}:{port}/v1", api_key="x", embed_model="m")
+    try:
+        vectors, _ = await client.embed(["hi"])
+        assert vectors == ([[9.0, 9.0]] if explicit_proxy else [[3.0, 4.0]])
+    finally:
+        if isinstance(client, OpenAIEmbeddingSDKClient):
+            await client.client.close()
+        server.close()
+        proxy.close()
+        await server.wait_closed()
+        await proxy.wait_closed()
 
 
 async def test_embed_reaches_local_server_despite_dead_env_proxy(monkeypatch: pytest.MonkeyPatch) -> None:
