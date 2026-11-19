@@ -17,7 +17,8 @@ from memu.app.memorize import lifecycle
 from memu.app.memorize.input import MemorizeInput, MessageInput
 from memu.hosts.base import RecordKind, TranscriptSource
 from memu.hosts.bridging import Layout, pipeline
-from memu.hosts.bridging.manifest import diff_tracked
+from memu.hosts.bridging.manifest import diff_tracked, snapshot_tracked
+from memu.hosts.bridging.recall_files import write_recall_file
 
 
 class FakeEmbeddingClient:
@@ -131,6 +132,68 @@ async def test_progressive_retrieve_ranks_all_three_layers(service: MemoryServic
     assert file_names[0] == "profile"
     # Committed resources land on the workspace track and are retrievable.
     assert [r["url"] for r in result["resources"]] == ["/workspace/notes.md"]
+
+
+@pytest.mark.parametrize("entry_point", ["bridging", "memorize"])
+@pytest.mark.parametrize(
+    "loss", ["file", "empty", "missing-manifest", "incomplete-manifest", "stale-manifest", "wrong-root"]
+)
+async def test_ordinary_commit_does_not_infer_backend_deletion(
+    service: MemoryService, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, entry_point: str, loss: str
+) -> None:
+    """Mirror loss never removes authoritative files or their searchable segments."""
+    seeded = await _seed(service)
+    monkeypatch.setattr(lifecycle.templates, "resolve", lambda _name, embedded: embedded)
+    if entry_point == "memorize":
+        workspace = lifecycle.MemorizeWorkspace(tmp_path / "mirror")
+        await lifecycle.prepare_memorize(
+            MemorizeInput(items=[MessageInput(role="user", content="hello")]),
+            workspace,
+            service,
+            verify_command="memu verify",
+        )
+        base, manifest = workspace.base, workspace.manifest
+    else:
+        layout = Layout(base=tmp_path / "mirror", host="test")
+        for file in seeded["recall_files"]:
+            write_recall_file(layout.base, file["track"], file)
+        snapshot_tracked(layout.base, layout.track_dirs, layout.memory_manifest)
+        monkeypatch.setattr(pipeline, "build_agentic_memory_backend_from_env", lambda: service)
+        base, manifest = layout.base, layout.memory_manifest
+
+    (base / "memory" / "profile.md").unlink()
+    if loss == "empty":
+        (base / "skill" / "deploy-checklist.md").unlink()
+    elif loss == "missing-manifest":
+        manifest.unlink()
+    elif loss == "incomplete-manifest":
+        manifest.write_text("{}", encoding="utf-8")
+    elif loss == "stale-manifest":
+        manifest.write_text('{"memory/profile.md": "outdated"}', encoding="utf-8")
+    elif loss == "wrong-root":
+        # A selected empty directory must not become an implicit delete-all.
+        if entry_point == "memorize":
+            workspace = lifecycle.MemorizeWorkspace(tmp_path / "wrong-root")
+            workspace.base.mkdir()
+            workspace.active_run.write_text("{}", encoding="utf-8")
+        else:
+            layout = Layout(base=tmp_path / "wrong-root", host="test")
+
+    if entry_point == "memorize":
+        await lifecycle.commit_memorize(workspace, service)
+    else:
+        await pipeline.commit(layout)
+
+    listed = await service.list_all_recall_files()
+    fields = ("id", "name", "track", "description", "content")
+    assert [{key: file[key] for key in fields} for file in listed["recall_files"]] == sorted(
+        ({key: file[key] for key in fields} for file in seeded["recall_files"]),
+        key=lambda file: (file["track"], file["name"], file["id"]),
+    )
+    recalled = await service.progressive_retrieve("coffee")
+    assert {file["id"] for file in recalled["files"]} == {file["id"] for file in seeded["recall_files"]}
+    assert "likes coffee" in {segment["text"] for segment in recalled["segments"]}
+    assert [resource["id"] for resource in recalled["resources"]] == [seeded["resources"][0]["id"]]
 
 
 async def test_recommit_updates_content_and_segments(service: MemoryService) -> None:
