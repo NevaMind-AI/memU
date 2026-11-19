@@ -23,3 +23,4 @@
 - [0021: pi Extension Hooks for Retrieval and Memorization](0021-pi-extension-hooks.md)
 - [0022: Shared Host Hooks for Retrieval and Memorization](0022-host-memory-hooks.md)
 - [0023: Remove Cola and Generic Host Adapters](0023-remove-cola-generic-adapters.md)
+- [0025: Share the Memory Core Across Local and Hosted Postgres (Proposed)](0025-shared-postgres-core.md) · [中文](0025-shared-postgres-core.zh.md)
