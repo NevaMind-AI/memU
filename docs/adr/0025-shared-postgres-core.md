@@ -68,7 +68,7 @@ These dates establish the named changes, not a complete release changelog. Model
 
 Preservation-check baseline on this documentation branch: `uv run python -m pytest tests/test_agentic.py tests/test_segment_vector_search.py tests/test_commit_concurrency.py tests/test_commit_thread_isolation.py -q` returned **133 passed, 4 skipped**. The four Postgres unit checks skipped because `pgvector` is not installed. No live Postgres or hosted integration was tested.
 
-**Upgrade acceptance is additive to each deployment's existing supported capabilities.** Keep the current memU tests for segment-native routing and fallback, bounded roll-up, pagination validation, name normalization/rejection, batched provider-failure behavior, local resources, scoped models and SQLite/inmemory atomicity. Add product integration checks without deleting or relaxing those assertions. Any change to an existing behavior requires a separately reviewed compatibility/migration decision. Step 1 records both the artifact baseline and the capability checklist; steps 2–6 compare against current shared-core behavior and retained product policies, not against the older package as a universal baseline.
+**Upgrade acceptance is additive to each deployment's existing supported capabilities.** Keep the current memU tests for segment-native routing and fallback, bounded roll-up, pagination validation, name normalization/rejection, batched provider-failure behavior, local resources, scoped models and SQLite/inmemory atomicity. Add product integration checks without deleting or relaxing those assertions. Any change to an existing behavior requires a separately reviewed compatibility/migration decision. Each Part records the artifact baseline and capability checklist; its acceptance compares against current shared-core behavior and retained product policies, not against the older package as a universal baseline.
 
 ## Disposition of each difference {#disposition}
 
@@ -93,9 +93,9 @@ The following proposed dispositions govern the comparison and six-step plan. **S
 
 Acceptance tests cover the selected shared contract **and** preservation of these product-owned differences. Structural equality of schemas, indexes, caches, resources, HTTP surfaces and runtime execution is not an acceptance requirement. A claimed shared operation that cannot preserve product behavior must stay behind a documented adapter boundary until the gap is resolved.
 
-## Execution order by improvement direction {#execution-order}
+## Three implementation Parts and PR boundaries {#execution-order}
 
-Implementation commits are reviewed in this order. The six-step architecture plan below describes the longer-term target; its retrieval step is not the first execution item.
+ADR 0025 is the shared design record for three implementation PRs, reviewed in order A → B → C. Draft PR #816 owns this bilingual design; each implementation PR links its Part and records its own commits, compatibility decisions and measured results. Each independently reviewable improvement gets its own commit. A Part's approval does not approve the other Parts or authorize release/deployment. Candidate items below remain subject to their individual review gates.
 
 | Order | Direction | Candidates and gate |
 | --- | --- | --- |
@@ -103,13 +103,33 @@ Implementation commits are reviewed in this order. The six-step architecture pla
 | B | memU → hipp: later shared-core improvements | Pagination validation, name validation/normalization and applicable commit guarantees from the evolution table. Each gets an independent commit and compatibility check; SQLite/inmemory atomicity does not automatically transfer to Postgres. |
 | C | Both have evolved / reconciliation needed | Segment native ranking, bounded file roll-up, tie handling, model/session sharing and transaction integration. Compare both implementations and preserve their improvements before choosing a common implementation. |
 
+### Part A — additive improvements to memU {#part-a}
+
+**PR scope and owner:** the memU owner implements portable improvements evidenced by hipp, in memU's own schema and architecture. No hosted dependency bump or product repository rewrite is required for the initial slice. Other improvements enter this PR only after separate evidence/scope review; product authentication, audit and deployment remain with hipp.
+
 **First proposed implementation commit: add a suitable non-unique pagination index to memU Postgres.** This updates memU only and keeps its current query, cursor, result ordering and supported scope models. Use a new Alembic revision plus matching model metadata; retain existing migrations and indexes. The hosted covering index is evidence of the optimization, not a column list to copy: memU permits omitted/partial scopes, nullable scope values and custom models. Select the index ordering using actual supported query shapes; custom schemas need an explicit compatible path.
 
 Expected benefit is less sorting/scanning for indexed paging shapes, not a guaranteed speedup for every scope. Costs include index storage, insert/update maintenance and migration build/locking time. Compare before/after `EXPLAIN (ANALYZE, BUFFERS)` and repeated-query measurements on isolated Postgres for full, partial and absent scope filters, first/deep pages and small/large corpora; check write overhead and index size. Verify identical page contents/cursors, fresh bootstrap, existing-schema upgrade/downgrade and model compatibility. Index construction policy must be reviewed for large existing databases. No implementation or performance result is claimed yet.
 
-## Six-step alignment plan {#steps}
+**Exit gate:** publish the index/query-shape choice, migration checks, pagination equivalence and measured read/write/storage effects in Part A's PR. Record limitations explicitly; this Part does not depend on the shared repository work in Part C.
 
-Steps are sequential; each has a reviewable exit condition. Steps 1–5 align existing capabilities. Step 6 verifies integration and rollout; deletion/recovery feature work stays paused separately.
+### Part B — adopt later memU capabilities in hipp {#part-b}
+
+**PR scope and owner:** the hosted owner adopts eligible later memU changes identified in the evolution table, in the hosted workspace. Initial candidates are pagination validation and name validation/normalization; review and commit each independently. Preserve product tenant restrictions, legacy names, error responses and failed-request retry behavior. Inventory existing-data collisions before adopting canonical naming changes.
+
+The PR records the exact package baseline/target, dependency and lockfile changes, and all intervening compatibility changes. A dependency upgrade may bring several upstream changes even when adapter commits are separate; assess the whole upgrade rather than claiming package-level isolation. Existing core capabilities stay enabled. SQLite/inmemory atomicity is not a hosted Postgres guarantee; transaction implementation belongs to Part C.
+
+**Impact and exit gate:** use isolated HTTP/mixin checks for valid/invalid inputs, tenant/track isolation, legacy identities and retries. Record any additional queries, embedding calls, normalization conflicts, rejected-input changes and migration needs. Demonstrate preserved product behavior and explicitly approved changes with the selected release. Part A's index does not gate this PR unless the selected dependency introduces a concrete requirement. Dependency upgrades, releases and deployment retain their own gates.
+
+### Part C — reconcile improvements from both sides {#part-c}
+
+**PR scope and owners:** both owners review retrieval, model/session seams and compound transactions where both implementations have useful behavior. Establish the per-operation contract and choose the implementation only after comparing both sides. Removal of an override or repository is conditional on that review and passing checks. Retain product-owned responsibilities from the disposition table.
+
+**Impact and exit gate:** report before/after ranking, tie handling, bounded reads, query count/latency, transaction duration, concurrency, rollback/cache visibility and migration effects for the selected operations. Default memU and product-shaped schemas must pass applicable isolated Postgres checks, with hosted HTTP checks for adopted paths. Scope or safety gates that need independent migration/release may require smaller follow-up PRs.
+
+#### Part C work breakdown {#steps}
+
+The following is a dependency outline within Part C, not the execution order across Parts A/B/C. Each item requires its own contract decision and reviewable commit(s). Retrieval contract work can precede transaction work without asserting transaction guarantees. Deletion/recovery feature work remains separately paused.
 
 | Step | Work / owner | Deliverable and acceptance gate |
 | --- | --- | --- |
@@ -120,11 +140,11 @@ Steps are sequential; each has a reviewable exit condition. Steps 1–5 align ex
 | 5. Adopt shared operations selectively | Hosted owner adopts eligible shared repos for the sync mixin path and reviews each overlapping async mutation; memU owner completes required seams | Remove duplication only for the selected general memory operations. Retain the async product repository, product projections, segment-position handling, audit and migrations as needed. Verify Dashboard/API-key behavior and nonblocking execution across retained and delegated paths. |
 | 6. Integrate, upgrade and verify | Both owners run shared checks; hosted owner controls dependency/lockfile, migration and deployment | Both default memU and product-shaped PG schemas pass; HTTP round-trips pass; stage with isolated data, explicit dependency bump and rollback plan. Production rollout remains separately authorized. Resume lifecycle work only after its storage guarantees and deletion contract are reviewed. |
 
-This PR completes the source inventory/plan portion of step 1 only; executable cross-repository checks and all runtime migration steps remain unimplemented. The intended end state is shared SQL and behavior, not merely passing method-shape checks with two independent implementations.
+This design PR records the source inventory and proposed gates for all three Parts. It implements none of them; executable cross-repository checks and runtime migration steps remain outstanding. For Part C, the intended end state is reuse of selected SQL and behavior with retained product responsibilities.
 
 ## Proposed boundary {#boundary}
 
-The goal is one shared implementation for the selected general memory operations, with product-owned adapters and repositories as assigned in the disposition table. Contract-compatible implementations remain appropriate for product-specific storage and runtime concerns.
+The Part C goal is one shared implementation for the selected general memory operations, with product-owned adapters and repositories as assigned in the disposition table. Contract-compatible implementations remain appropriate for product-specific storage and runtime concerns.
 
 | Shared in memU | Retained by the hosted product |
 | --- | --- |
@@ -138,9 +158,9 @@ Generic Voyage support may remain open-source. The hosted choice to use Voyage, 
 
 Scope validation and tenant authorization are different responsibilities. A trusted tenant restriction is immutable store context; request filters can narrow it but never replace or widen it. An empty filter must still be tenant-bound. Do not add tenant credentials or product authorization logic to the public service API.
 
-## First implementation slice: reuse existing retrieval contracts {#first-slice}
+## Part C retrieval candidate: existing contracts {#first-slice}
 
-No new public entry point, repository method or configuration flag is needed for this slice:
+Subject to Part C's contract review, this candidate uses existing entry points and repository protocols:
 
 1. Establish the existing ranking/roll-up contract with fixed synthetic vectors and scoped records. Define behavior for equal scores, absent vectors, empty IDs and track filters. Use the same checks against both implementations.
 2. In the hosted adapter's owning workspace, implement `vector_search_segments` using its current native query. Accept `id`/`id__in` in file filtering, preserving unconditional authenticated tenant predicates. This must remain a bounded SQL query, not a full table read followed by Python filtering.
@@ -149,7 +169,7 @@ No new public entry point, repository method or configuration flag is needed for
 
 This slice removes duplicate service algorithms. It does not yet consolidate the two native SQL implementations; that is the next slice. It is independently reviewable and does not require rewriting product tables or changing embedding models.
 
-## Next slice: consolidate Postgres implementation {#postgres}
+## Part C repository and transaction candidate {#postgres}
 
 First audit the existing `sqla_models`, record conversion, scope-model and session hooks. Extend those concrete seams only where the second real consumer requires it; do not introduce a new storage framework or configurable query language.
 
@@ -167,7 +187,7 @@ If a model cannot satisfy an operation, expose a clear unsupported contract duri
 
 ## Compatibility checks and release gate {#validation}
 
-Use a small reusable set of pytest assertions/fixtures in memU's test support, importable by the hosted integration without depending on a repository checkout's `tests` package. Its packaging mechanism is an implementation detail to settle in the first slice; no new package or plugin framework is proposed. Run it on actual isolated Postgres instances for SQL behavior; inmemory/SQLite checks alone do not prove Postgres parity.
+Use a small reusable set of pytest assertions/fixtures in memU's test support, importable by the hosted integration without depending on a repository checkout's `tests` package. Its packaging mechanism is an implementation detail to settle in Part C's contract-check slice; no new package or plugin framework is proposed. Run it on actual isolated Postgres instances for SQL behavior; inmemory/SQLite checks alone do not prove Postgres parity.
 
 | Check | Required result |
 | --- | --- |
@@ -191,10 +211,12 @@ The same checks should run in both repositories' CI when the product bumps memU.
 
 This PR proposes the boundary and sequence only. It changes no runtime code, storage schema, dependency version or deployed service. No backend parity suite or hosted runtime check has been executed as part of this document-only change. Source references and bilingual Markdown links are checked.
 
-Review decisions:
+Review and acceptance are tracked per Part:
 
-1. Adopt retrieval-contract alignment as the first implementation slice.
-2. Adopt shared Postgres repositories with explicit model/tenant/session seams as the target, preserving product schema ownership.
-3. Agree on the contract-check distribution and the owning workspace for hosted changes before implementing that integration.
+1. Part A: review the memU pagination-index candidate and its compatibility/performance evidence; commit each accepted enhancement separately.
+2. Part B: review each later-core adoption and the full hosted dependency upgrade; record legacy-data and API effects.
+3. Part C: agree each shared operation's contract, implementation and checks, including distribution of reusable checks and the owning hosted workspace, before removing duplication.
 
-Acceptance for the subsequent migration requires reuse of the selected common operations, passing their behavioral checks, and preservation of each retained product responsibility in the disposition table. Removing duplicate host overrides is an initial measurable result; retained product SQL/repositories are reviewed by responsibility rather than counted as incomplete migration. Lifecycle work resumes only after its required shared storage guarantees and separate deletion contract are agreed; no retention policy is decided here.
+Implementation PRs link this ADR's Part anchor, identify completed commits and outstanding gates, and update both ADR languages when a design decision changes. Preserve the source comparison as evidence; new decisions are recorded with their rationale rather than rewriting the pinned source history.
+
+Acceptance for the subsequent migration requires reuse of the selected common operations, passing their behavioral checks, and preservation of each retained product responsibility in the disposition table. Removing duplicate host overrides is a possible Part C result after contract review; retained product SQL/repositories are reviewed by responsibility rather than counted as incomplete migration. Lifecycle work resumes only after its required shared storage guarantees and separate deletion contract are agreed; no retention policy is decided here.
