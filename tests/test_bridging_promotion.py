@@ -147,7 +147,7 @@ async def test_commit_removes_submitted_empty_memory_only_after_success(rig, mon
     monkeypatch.setattr(pipeline.templates, "resolve", lambda _key, fallback: fallback)
     await prepare(source, layout, verify_command="x verify-resources")
     memory = layout.memory / "different-filename.md"
-    memory.write_text("---\nname: empty\ndescription: keep\n---\n \t\n", encoding="utf-8")
+    memory.write_text("---\nname: empty\ndescription: keep\nempty: true\n---\n \t\n", encoding="utf-8")
     skill = layout.skill / "empty.md"
     skill.write_text("---\nname: empty\n---\n", encoding="utf-8")
     before = layout.memory_manifest.read_bytes()
