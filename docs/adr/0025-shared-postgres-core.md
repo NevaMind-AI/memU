@@ -49,6 +49,29 @@ Compared revisions: memU `ee7e251f4cd5f4f984577edf3233e9358b921ed9` (runtime bas
 
 Evidence entry points: [memU source at compared revision](https://github.com/NevaMind-AI/memU/tree/ee7e251f4cd5f4f984577edf3233e9358b921ed9/src/memu/database/postgres), [hipp sync store](https://github.com/NevaMind-AI/hippocampus-server/blob/cca499a63d5404c156903fe9de37d076f504faca/services/memu-service/app/infrastructure/memu/store.py), [hipp async repository](https://github.com/NevaMind-AI/hippocampus-server/blob/cca499a63d5404c156903fe9de37d076f504faca/services/memu-service/app/infrastructure/persistence/repositories/memory_files.py), [hipp models](https://github.com/NevaMind-AI/hippocampus-server/tree/cca499a63d5404c156903fe9de37d076f504faca/services/memu-service/app/infrastructure/persistence/models).
 
+## Disposition of each difference {#disposition}
+
+The following proposed dispositions govern the comparison and six-step plan. **Shared implementation** means reuse general memory code; **contract alignment** permits distinct storage/runtime implementations; **retain in hipp** assigns long-term product ownership. A row can contain both a reusable operation and a product-owned policy.
+
+| Comparison rows | Disposition | Shared / aligned part | Long-term hipp ownership |
+| --- | --- | --- | --- |
+| 1. Sync/async paths | Contract alignment + selective reuse | Overlapping memory mutations follow the same identity, reconciliation and transaction contract | Async product repository, Dashboard orchestration and product queries can remain; delegation is evaluated per operation |
+| 2. ORM / IDs | Contract alignment | Stable domain records and parent-ID mapping | Existing declarative models, UUID storage and HTTP malformed-ID translation |
+| 3. Tenant boundary | Contract alignment + retain in hipp | Generic store must apply an injected mandatory trusted restriction | Authentication, organization/project resolution, RBAC and constructing the trusted restriction |
+| 4–6. Identity, uniqueness, concurrent creation | Shared implementation for domain rules; contract alignment for schema enforcement | Identity/display-field distinction, per-track identity and conflict semantics | Product unique constraints, constraint names and migrations; open-source schema has its own migration |
+| 7. Segment fields / ownership | Contract alignment + retain in hipp | Shared segment text/reconciliation and parent-ownership checks | Product index/position derivation, denormalized columns and composite constraints via an adapter/default |
+| 8. Vector persistence | Contract alignment + retain in hipp | Explicit optional file-vector capability and vector validation interface | File-vector omission, fixed deployed dimension and model/reindex policy |
+| 9–10. Ranking / roll-up | Shared implementation target | Generic native query and mixin ranking/roll-up semantics, including agreed tie handling | Index deployment/tuning and any documented approximate-search policy; implementation must satisfy its declared capability |
+| 11. Pagination | Shared implementation + retain in hipp | Keyset ordering and cursor/page behavior | Product covering indexes, query-plan tuning and their migrations |
+| 12. Sessions / transactions | Shared implementation for mutation mechanics; contract alignment for runtime | Transaction boundary, rollback and safe repository participation | Connection pools, engine lifecycle, async request/thread execution and product resource ownership |
+| 13. Cache | Contract alignment | Correct fresh reads, rollback publication and cross-instance visibility | Hosted stateless/no-cache choice may remain; it need not adopt local `DatabaseState` caching |
+| 14. Delete / audit | Selective shared implementation + retain in hipp | Existing general deletion/cascade contract; future lifecycle rules require separate review | Audit triggers, history tables, audit reads and history retention. They are not prerequisites for local installations |
+| 15. Resources | Retain distinct capability | Explicit supported/unsupported behavior at the integration boundary | Hosted resource-disabled policy may remain; local resources continue to work |
+| 16. Schema lifecycle | Retain separate ownership + contract alignment | Required-column/constraint capability checks for the selected operations | Product Alembic history, table names, deployment and rollback; local memU owns its own bootstrap |
+| Embedding and product edge | Retain in hipp | Inject provider-neutral embedding interface and test doubles | Voyage runtime model/endpoint/key/dimension policy, usage/billing, HTTP DTO/auth/CSRF and deployment configuration |
+
+Acceptance tests cover the selected shared contract **and** preservation of these product-owned differences. Structural equality of schemas, indexes, caches, resources, HTTP surfaces and runtime execution is not an acceptance requirement. A claimed shared operation that cannot preserve product behavior must stay behind a documented adapter boundary until the gap is resolved.
+
 ## Six-step alignment plan {#steps}
 
 Steps are sequential; each has a reviewable exit condition. Steps 1–5 align existing capabilities. Step 6 verifies integration and rollout; deletion/recovery feature work stays paused separately.
@@ -59,14 +82,14 @@ Steps are sequential; each has a reviewable exit condition. Steps 1–5 align ex
 | 2. Align retrieval with the existing protocol | Hosted owner changes adapter/host; memU owner only adds agreed contract coverage/tie rule if needed | Implement `vector_search_segments` and scoped `id__in`; remove `_recall_segments` / `_collect_files` overrides and unused helpers. Actual isolated PG checks show matching scores, tie policy and SQL LIMIT/bounded-ID access. |
 | 3. Make memU Postgres reusable with product models | memU owner extends concrete model/record/session/trusted-predicate seams; hosted owner supplies mapping | A synthetic product-shaped schema uses the shared repositories without auto-migration or engine disposal. All CRUD, parent checks and retry reads remain tenant-bound; UUIDs, optional file vectors and extra segment fields round-trip. Audit default schema uniqueness and migration/duplicate handling. |
 | 4. Unify transactions and concurrent writes | Shared core owner plus hosted integration owner | A transaction is owned above compound operations; no inner commits split it. File/segment constraints and bounded retries are tested. Failure injection proves rollback, unchanged cache publication and cross-instance visibility on real PG. Embedding calls stay outside long DB write transactions. |
-| 5. Replace duplicated persistence paths | Hosted owner adopts shared repos for sync mixin path and delegates overlapping async product mutations; memU owner completes required seams | Remove general CRUD/ranking SQL duplication; retain product-specific audit/query projections and schema migrations. Verify Dashboard deletes/segment edits as well as API-key commits, cascades and history triggers. Do not block the event loop when bridging sync and async execution. |
+| 5. Adopt shared operations selectively | Hosted owner adopts eligible shared repos for the sync mixin path and reviews each overlapping async mutation; memU owner completes required seams | Remove duplication only for the selected general memory operations. Retain the async product repository, product projections, segment-position handling, audit and migrations as needed. Verify Dashboard/API-key behavior and nonblocking execution across retained and delegated paths. |
 | 6. Integrate, upgrade and verify | Both owners run shared checks; hosted owner controls dependency/lockfile, migration and deployment | Both default memU and product-shaped PG schemas pass; HTTP round-trips pass; stage with isolated data, explicit dependency bump and rollback plan. Production rollout remains separately authorized. Resume lifecycle work only after its storage guarantees and deletion contract are reviewed. |
 
 This PR completes the source inventory/plan portion of step 1 only; executable cross-repository checks and all runtime migration steps remain unimplemented. The intended end state is shared SQL and behavior, not merely passing method-shape checks with two independent implementations.
 
 ## Proposed boundary {#boundary}
 
-The goal is one shared implementation of general memory behavior and Postgres operations, with a small product adapter. Matching method names while retaining independent algorithms is only an intermediate step.
+The goal is one shared implementation for the selected general memory operations, with product-owned adapters and repositories as assigned in the disposition table. Contract-compatible implementations remain appropriate for product-specific storage and runtime concerns.
 
 | Shared in memU | Retained by the hosted product |
 | --- | --- |
@@ -105,7 +128,7 @@ The shared repositories need to support:
 
 Existing product schema/migrations remain product-owned. Shared lifecycle or repository changes must come with explicit migration requirements for each supported schema. Do not point open-source bootstrap at product tables or let it create/alter them automatically. Preserve IDs, timestamps, owner identity, track/name uniqueness, segment ownership/cascades and audit behavior. Baseline backup and migration rollback must be reviewed before any production change.
 
-If a model cannot satisfy an operation, expose a clear unsupported contract during integration rather than accepting and silently dropping behavior. The target adapter maps models and product context; it does not fork CRUD, ranking or lifecycle algorithms.
+If a model cannot satisfy an operation, expose a clear unsupported contract during integration rather than accepting and silently dropping behavior. The target adapter owns product-specific mapping, policies and operations. Selected shared CRUD, ranking and future lifecycle operations delegate to the common core where compatible; product-specific SQL and async repositories remain valid under their documented contracts.
 
 ## Compatibility checks and release gate {#validation}
 
@@ -139,4 +162,4 @@ Review decisions:
 2. Adopt shared Postgres repositories with explicit model/tenant/session seams as the target, preserving product schema ownership.
 3. Agree on the contract-check distribution and the owning workspace for hosted changes before implementing that integration.
 
-Acceptance for the subsequent migration is measured by deletion of duplicate host overrides and then duplicate general SQL logic, plus passing the checks above on both backends. A private adapter may remain, but must map product context rather than independently redefine memory behavior. Lifecycle work resumes only after its required shared storage guarantees and separate deletion contract are agreed; no retention policy is decided here.
+Acceptance for the subsequent migration requires reuse of the selected common operations, passing their behavioral checks, and preservation of each retained product responsibility in the disposition table. Removing duplicate host overrides is an initial measurable result; retained product SQL/repositories are reviewed by responsibility rather than counted as incomplete migration. Lifecycle work resumes only after its required shared storage guarantees and separate deletion contract are agreed; no retention policy is decided here.
