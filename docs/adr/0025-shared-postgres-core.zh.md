@@ -1,6 +1,7 @@
 # ADR 0025：本地与托管 Postgres 共用记忆核心
 
-- 状态：提案；仅供设计审阅
+- 状态：已退出当前实施计划；保留历史提案
+- 当前方向：[ADR 0026](0026-memory-clearing-through-commit.zh.md)。下文 A/B/C 计划停止推进；共享 Postgres 抽取和分页索引草稿暂停。当前审阅通过 commit 显式清空 memory 与安全维护本地镜像。
 - 议题：MEM-13
 - 关联：[ADR 0002](0002-pluggable-storage-and-vector-strategy.md)、[ADR 0012](0012-cloud-backed-agentic-backend.md)、[ADR 0014](0014-paginated-list-all-recall-files.md)
 - 后续背景：[PR #814](https://github.com/NevaMind-AI/memU/pull/814) 在本边界审阅期间暂停推进；该草稿已预留 ADR 编号 0024。

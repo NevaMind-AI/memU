@@ -1,6 +1,7 @@
 # ADR 0025: Share the memory core across local and hosted Postgres
 
-- Status: Proposed; design review only
+- Status: Withdrawn from the current implementation plan; retained as historical proposal
+- Current direction: [ADR 0026](0026-memory-clearing-through-commit.md). The A/B/C plan below is inactive; shared Postgres extraction and the pagination-index draft are paused. Current work reviews explicit memory clearing through commit and safe local mirrors.
 - Task: MEM-13
 - Related: [ADR 0002](0002-pluggable-storage-and-vector-strategy.md), [ADR 0012](0012-cloud-backed-agentic-backend.md), [ADR 0014](0014-paginated-list-all-recall-files.md)
 - Follow-up context: [PR #814](https://github.com/NevaMind-AI/memU/pull/814) is paused while this boundary is reviewed. ADR number 0024 is reserved by that draft.
