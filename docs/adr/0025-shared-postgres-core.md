@@ -93,6 +93,20 @@ The following proposed dispositions govern the comparison and six-step plan. **S
 
 Acceptance tests cover the selected shared contract **and** preservation of these product-owned differences. Structural equality of schemas, indexes, caches, resources, HTTP surfaces and runtime execution is not an acceptance requirement. A claimed shared operation that cannot preserve product behavior must stay behind a documented adapter boundary until the gap is resolved.
 
+## Execution order by improvement direction {#execution-order}
+
+Implementation commits are reviewed in this order. The six-step architecture plan below describes the longer-term target; its retrieval step is not the first execution item.
+
+| Order | Direction | Candidates and gate |
+| --- | --- | --- |
+| A | hipp → memU: additive improvements to memU | Start with a Postgres keyset-pagination index, present in hipp migration `e3f1a2b4c6d8` (2026-07-26), absent from memU's default baseline. Review other candidates individually; uniqueness and concurrency changes require separate identity/data analysis. |
+| B | memU → hipp: later shared-core improvements | Pagination validation, name validation/normalization and applicable commit guarantees from the evolution table. Each gets an independent commit and compatibility check; SQLite/inmemory atomicity does not automatically transfer to Postgres. |
+| C | Both have evolved / reconciliation needed | Segment native ranking, bounded file roll-up, tie handling, model/session sharing and transaction integration. Compare both implementations and preserve their improvements before choosing a common implementation. |
+
+**First proposed implementation commit: add a suitable non-unique pagination index to memU Postgres.** This updates memU only and keeps its current query, cursor, result ordering and supported scope models. Use a new Alembic revision plus matching model metadata; retain existing migrations and indexes. The hosted covering index is evidence of the optimization, not a column list to copy: memU permits omitted/partial scopes, nullable scope values and custom models. Select the index ordering using actual supported query shapes; custom schemas need an explicit compatible path.
+
+Expected benefit is less sorting/scanning for indexed paging shapes, not a guaranteed speedup for every scope. Costs include index storage, insert/update maintenance and migration build/locking time. Compare before/after `EXPLAIN (ANALYZE, BUFFERS)` and repeated-query measurements on isolated Postgres for full, partial and absent scope filters, first/deep pages and small/large corpora; check write overhead and index size. Verify identical page contents/cursors, fresh bootstrap, existing-schema upgrade/downgrade and model compatibility. Index construction policy must be reviewed for large existing databases. No implementation or performance result is claimed yet.
+
 ## Six-step alignment plan {#steps}
 
 Steps are sequential; each has a reviewable exit condition. Steps 1–5 align existing capabilities. Step 6 verifies integration and rollout; deletion/recovery feature work stays paused separately.
