@@ -23,7 +23,7 @@ from memu.hosts.base import TranscriptSource
 from memu.hosts.bridging.instructions import MEMORY_JOB_TEMPLATE, SKILL_JOB_TEMPLATE, prepare_instruction_jobs
 from memu.hosts.bridging.layout import TRACK_DIRS, Layout
 from memu.hosts.bridging.manifest import diff_tracked, snapshot_tracked
-from memu.hosts.bridging.recall_files import read_recall_file, write_recall_file
+from memu.hosts.bridging.recall_files import finalize_recall_file, read_recall_file, write_recall_file
 from memu.hosts.bridging.resources import RESOURCE_JOB_TEMPLATE, prepare_resource_job, read_resources
 from memu.hosts.bridging.transcripts import prepare_transcripts
 
@@ -158,8 +158,7 @@ async def commit(layout: Layout) -> dict[str, Any]:
     result: dict[str, Any] = await backend.commit_results(recall_files=recall_files, resource=resources)
 
     for path, recall_file in zip(changed, recall_files, strict=True):
-        if recall_file["track"] == "memory" and not recall_file["content"].strip():
-            path.unlink(missing_ok=True)
+        finalize_recall_file(path, recall_file)
 
     snapshot_tracked(layout.base, layout.track_dirs, layout.memory_manifest)
     pending = layout.session_manifest_pending
