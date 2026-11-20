@@ -23,4 +23,4 @@
 - [0021: pi Extension Hooks for Retrieval and Memorization](0021-pi-extension-hooks.md)
 - [0022: Shared Host Hooks for Retrieval and Memorization](0022-host-memory-hooks.md)
 - [0023: Remove Cola and Generic Host Adapters](0023-remove-cola-generic-adapters.md)
-- [0024: Explicit Memory Clearing Through Commit and Safe Local Mirrors (Proposed)](0024-memory-clearing-through-commit.md) · [中文](0024-memory-clearing-through-commit.zh.md)
+- [0024: Empty Memory Bodies Through Commit and Local Mirroring (Proposed)](0024-memory-clearing-through-commit.md) · [中文](0024-memory-clearing-through-commit.zh.md)

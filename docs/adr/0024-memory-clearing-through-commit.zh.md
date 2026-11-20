@@ -1,94 +1,56 @@
-# ADR 0024：通过 commit 显式清空 memory 与安全维护本地镜像
+# ADR 0024：通过 commit 清空 memory 正文及本地镜像规则
 
-- 状态：提案；实现前审阅契约
-- 议题：MEM-13；设计交接来自 MEM-16
+- 状态：提案；设计审阅
+- 议题：MEM-13
 - 关联：[ADR 0012](0012-cloud-backed-agentic-backend.md)、[ADR 0014](0014-paginated-list-all-recall-files.md)
 - [English](0024-memory-clearing-through-commit.md)
 
-## 目标与边界 {#goal}
+## 目标与范围 {#goal}
 
-通过现有 `commit_results` 流程，减少过时记忆正文对片段召回和受管理本地文件的干扰。首批范围为明确指定的已有 `memory`：清空正文，保留数据库身份，对账 segments，并安全移除空正文的本地镜像。这是待审阅契约，尚未实现生命周期功能，也不保证可恢复删除。
+使用现有 `commit_results` 流程，减少过时 memory 正文对片段召回和本地文件的干扰：提交空正文，保留数据库文件记录，移除其 segments，并不保留对应本地 Markdown 镜像。
 
-共同服务流程继续使用 `AgenticMixin`。memU 支持调用方管理的 user/agent scope，也支持多个用户；托管产品额外绑定鉴权后的组织/项目租户，使用不同 UUID 模型、segment 身份/位置约束、审计及事务所有权。两侧仓库继续独立拥有。
+服务保持三个入口和 embedding-only 架构。共同服务流程继续位于 `AgenticMixin`，本地和托管仓库各自拥有模型与 scope 职责。首批改动只适用于 `memory`。PR #814 已关闭。
 
-公共入口仍为 `list_all_recall_files`、`progressive_retrieve`、`commit_results`，服务保持 embedding-only。`skill` 和 `resource` 单独决策。PR #814 已关闭。
+## 当前行为 {#evidence}
 
-## 当前证据 {#evidence}
-
-源码基线：memU 运行代码 `12d144c`，文档 head `fbeea7a`；托管 checkout `cca499a`，固定 `memu-cli==0.11.0b3`。MEM-16 报告了隔离 inmemory/假 embedding 和临时文件检查；MEM-13 重新读取了以下源码。这些报告不是线上 Cloud 验证，也不是新一轮跨后端测试结果。
+源码基线：memU 运行代码 `12d144c`；托管 checkout `cca499a` 固定 `memu-cli==0.11.0b3`。MEM-16 报告了隔离 inmemory/假 embedding 及临时文件检查，MEM-13 核实了源码；这些观察不代表线上 Cloud 行为。
 
 | 路径 | 观察到的行为 |
 | --- | --- |
-| `src/memu/app/agentic.py`：规划与 segment 对账 | 正文会 strip。对已有 memory 显式提交空正文不生成 segment 文本，更新文件后删除旧 segments，文件记录保留。 |
-| 同路径：description 更新 | 空 description 不清除旧描述；描述不变时可能保留文件向量。当前片段检索不通过该向量直接召回文件。 |
-| 同路径：skill segment 生成 | skill 正文为空仍会生成 name/description segment。 |
-| `src/memu/hosts/bridging/recall_files.py` | writer 对空正文仍写 frontmatter；reader 单独解析正文并要求有 name。 |
-| `src/memu/hosts/bridging/pipeline.py`、`src/memu/hosts/retrieval.py` | prepare 列表并写文件，retrieve 也落盘；只在 writer 跳过不能移除旧镜像。commit 在后端成功后推进快照/session 状态。 |
-| `src/memu/hosts/bridging/manifest.py` | 缺失路径不会作为内容更新提交。 |
+| `src/memu/app/agentic.py` | 已有 memory 正文 strip 后更新；空正文不产生 segment 文本，对账移除旧 segments，文件记录保留。空 description 不清旧描述，文件向量可能保留。 |
+| 同路径：skill 生成 | 空 skill 正文仍生成 name/description segment。 |
+| `src/memu/hosts/bridging/recall_files.py` | 正文为空仍写 frontmatter。 |
+| `src/memu/hosts/bridging/pipeline.py` | prepare 写列表返回的文件；commit 提交变更文件，后端成功后重拍目录快照。 |
+| `src/memu/hosts/retrieval.py` | 返回的文件会落盘并提供路径。 |
+| `src/memu/hosts/bridging/manifest.py` | 内容 diff 忽略缺失文件。 |
 
-当前源码还会把省略/null content 当空正文处理；这不能证明用户有意清空。实施下述显式输入契约前，需要审阅调用方兼容性。
+## 目标行为 {#behavior}
 
-## 建议 commit 契约 {#commit}
+1. 通过现有 commit payload 提交目标 memory，保留定位元数据，正文为空或纯空白。沿用现有 scope/name 定位与普通 commit 语义。
+2. commit 成功后正文为空，旧 segments 移除。数据库记录及元数据在 list/Dashboard 仍可见；片段移除成功后，当前片段检索不再命中该 memory。
+3. 按解析后的正文 `body.strip()` 判空，不按 Markdown 总字节数。空 memory 不生成只有 frontmatter 的镜像；处理明确为空的 memory 时，移除正常目标路径上已有的镜像，只跳过写入会残留旧内容。
+4. prepare/retrieve 使用相同空 memory 落盘规则；bridging commit 在后端成功后移除本次提交的空 memory 镜像。retrieve 不提供未实际落盘的路径。列表或检索未返回某项，本身不构成移除文件的依据。
+5. 保持现有无声覆盖行为、快照/session 流程和错误传播。后端抛错不会进入成功后的清理；文件系统失败沿用普通 host 错误处理。
+6. 本地文件缺失或目录为空仍不提交后端清空；skill 和 resource 行为不变。
 
-1. 有意清空需在经校验 scope 中指明已有 memory，并显式提交 `content: ""`；纯空白正文等价。本地文件缺失、空目录、不完整 manifest 都不产生清空意图。通过镜像编辑提交时保留定位目标的 frontmatter。
-2. 按现有 scope/track/name 规则精确定位目标。审阅规范化/历史名称碰撞、未知目标及并发创建，不能把针对已有目标的清空静默变成新建占位记录。
-3. 确认成功后正文为空，文件身份保留，已有 segments 移除。重复清空应收敛到同一状态，其他 scope/track 不变。
-4. 本提案保留现有描述更新语义：`description: ""` 不代表擦除旧元数据。name、description、时间戳及可能的文件向量仍在，list/Dashboard 仍可见。达到的是停止片段召回，不是所有入口隐身、历史擦除或存储删除。
-5. 发布前明确省略/null content 的行为。盘点已有客户端，选择兼容校验或显式调用约定，不能把所有不完整 payload 都视为有意清空。
+保留数据库身份不代表保留旧正文。元数据及可能的文件级向量仍在，目标效果是停止片段召回、移除本地空壳。当前 Postgres 按方法提交不代表整批原子性；本提案不新增恢复保障。
 
-## 安全的本地镜像契约 {#mirrors}
+## 实现计划 {#implementation}
 
-按解析后的正文 `body.strip()` 判断空 memory，不按整个 Markdown 字节数。prepare 和 retrieve 使用一致规则，不返回未实际落盘的路径。继续支持非空 memory 和 skill。
-
-权威空 memory 不生成 Markdown 空壳。若旧路径存在，仅在能证明受管理归属、目标身份和本地字节未变化时清理。有效管理基线可提供证明；文件名或位于某目录下本身不够。manifest 缺失/过期、路径碰撞、符号链接、错误根目录或归属不明时，保留文件并报告不确定性/冲突。
-
-对于本地编辑提交的清空，需要区分已提交基线与本次提交字节：后端成功前，清空本身就是未提交编辑。捕获并复核提交内容指纹，保留其后的本地编辑。prepare/retrieve 观察到远端空记录时，按可信已提交基线比较。哈希检查不是锁；实现必须处理检查与 unlink/write 之间的竞争，包括其他 host 进程。
-
-后端失败不能触发镜像清理，也不能按成功推进快照/session。若后端成功而本地清理失败，分别报告后端成功与本地对账失败，保留重试信息，不能声称已完全同步。实现前需明确 manifest/session 顺序与崩溃恢复；当前它们不是原子文件系统事务。
-
-## 恢复、并发与部分失败 {#failure}
-
-保留身份不代表保留旧正文。恢复需有已知旧副本/历史/备份，经显式 scoped recommit 重建内容与 segments。不承诺自动恢复 API 或保留期，产品审计 before-image 也不是已验证恢复保障。
-
-当前两条 Postgres 路径按仓库方法独立提交，共享 mixin 不提供整批原子性。失败可能留下已清空文件但旧 segments 残存，或批次部分完成。失败后必须读回并对账/重试，不能报告片段召回已排除。SQLite/inmemory 的保障不能推广为 Cloud 保障。
-
-实施前需决定：清空与并发内容更新如何冲突、精确目标如何建立、部分完成如何报告。现有 payload 没有形成跨后端 compare-and-swap revision 契约。与用户审阅最后写入生效和显式冲突检测的取舍，测试重试，避免旧重试覆盖新写入。暴露和解决这些具体风险不要求先抽取整个仓库。
-
-## 影响与验收 {#validation}
-
-预期减少可检索 segments 和本地 memory 文件；保留记录仍占列表带宽与存储。清理开销随目标片段数增长，当前规划还会按 track 列出文件。镜像归属检查增加本地 I/O，可能需要同步机制。目前没有延迟或成本提升实测；需对隔离的小/大目标记录 provider 调用、数据库查询/删除数及镜像工作量。
-
-| 检查 | 必须满足的结果 |
-| --- | --- |
-| 显式空/纯空白正文 | 已有 scoped memory 身份保留、正文空、segments 为零，当前片段检索不命中 |
-| Scope/track 与元数据 | 其他记录不变，保留元数据及列表可见性有说明，skill/resource 行为保留 |
-| 文件缺失/空目录/不完整 payload | 不从缺失推断清空，省略/null 行为明确审阅并测试 |
-| Prepare 与 retrieve | 不产生新空壳或不存在的路径，安全对账受管理且未修改的旧镜像 |
-| 本地编辑与未知归属 | 保留并发/未提交编辑，冲突可见，不任意删文件 |
-| 后端/本地失败与重试 | 不提前清理或推进状态，部分结果可见且可通过对账恢复 |
-| 后端并发写入 | 证明经审阅的冲突策略，不承诺未实现的原子性或旧重试保障 |
-| 从已知旧正文恢复 | 显式 recommit 重建可读可检索内容，不声称有历史保留 |
-| Local 与 Cloud | 分别在隔离数据上读回后端并检索，独立确认托管固定版本行为 |
-
-## 实现顺序与审阅门槛 {#implementation}
-
-以下建议按可独立审阅的 commit 推进，不代表未决契约已获实施批准。
-
-| 顺序 | 实现范围 | 继续前的检查 |
+| Commit | 范围 | 验收 |
 | --- | --- | --- |
-| 1. 固定当前行为 | 用合成记录为 `AgenticMixin`、bridging commit/prepare 和 retrieval 补针对性检查；盘点直接/Cloud payload 及托管固定版本实现。 | 区分显式空、空白、省略/null、未知/历史名称、保留元数据、skill 和 scope；不引入新清空语义或调用生产数据。 |
-| 2. 商定并落实输入/目标行为 | 审阅后仅在共同规划边界实现约定的校验/目标定位，补适用后端和托管覆盖。 | 按选定契约避免误建占位记录、不完整 payload 误清空；说明最后写入/冲突及重试限制，不暗示跨后端 CAS 或原子性。 |
-| 3. 建立受管理镜像身份/状态 | 按需扩展现有 manifest/状态机制，绑定后端/scope、记录身份、路径及已提交/本次提交指纹；明确旧 manifest 迁移和待对账状态。 | 现有路径/哈希 manifest 不能独立证明归属。切换后端/scope 不授权清理，未知历史路径保留。测试状态写入中断及多进程重叠。 |
-| 4. 对账成功的 commit | 请求前捕获不可变的提交字节/身份，处理确认结果后按条件对账空镜像，只发布已确认的基线和约定的 session 转移。 | 不能沿用当前全目录重扫快照，把请求期间的新编辑记成已提交。后端成功/本地失败可重试对账，不盲目重放过时的远端清空；覆盖崩溃点及后续本地编辑。 |
-| 5. Prepare/retrieve 使用镜像规则 | 在现有 writer/调用方复用窄范围落盘判断。prepare 只对明确返回的空记录处理；retrieve 仅为实际落盘文件提供路径。 | 检索缺失不代表删除：已清空记录通常不再返回。不增加每轮全库列表；写入和清理均保护本地编辑，不把不可信本地文件静默初始化成受管理数据。 |
-| 6. 分部署验证 | 跑相关 inmemory/SQLite 回归及真实隔离 Postgres/托管检查，包含部分失败和从已知内容恢复；同步双语 ADR 和 PR 证据。 | 后端读回、片段排除、本地状态在被测策略下相符；明确 Cloud/运行环境未覆盖项，不隐含生产清洗、依赖发布或部署。 |
+| 1. 固定 commit 行为 | 用合成数据检查已有 memory 空/空白正文、保留元数据、segment 移除与 scope/track 隔离。 | 明确当前行为，不改 payload 语义；区分 Local 结果和托管固定版本证据。 |
+| 2. 应用空 memory 镜像规则 | 复用现有 writer/路径逻辑，调整 prepare/retrieve 调用方处理未落盘路径，bridging commit 成功后移除本次提交的空 memory 镜像。 | 不生成新空壳，旧目标镜像被移除；非空 memory、skill 保持现有无声写入行为；后端失败不执行成功后的移除。 |
+| 3. 验证集成 | 隔离数据测试 list/prepare、retrieve 输出和 commit，跑相关后端/host 回归。 | 正文/segment 状态与镜像结果一致；本地缺失不清后端，manifest/session 行为沿用现状；Cloud 单独验证后才能给出 Cloud 结论。 |
 
-**Step 3–5 前必须决定的状态/并发问题：** 说明协作进程如何协调、如何保护任意编辑器写入。host 锁不能锁住编辑器，先比较再 unlink 仍有竞争；无法证明安全移除时保留文件并报告冲突。明确后端确认、文件系统操作、基线发布、session 提升之间的持久对账记录/顺序，不能把整个过程称为原子事务。逐目标确认/对账不应要求全量列表驻留内存。
+当前源码把省略/null content 也当空正文。改变此行为、新建语义或名称定位需要单独兼容决定，不纳入本实现计划。
 
-**性能预算：** 元数据不变、无新增片段文本的清空不应增加正文 embedding 调用；描述变化或其他批次项仍可能 embedding。先记录现有按 track 列表及逐 segment 删除成本，再考虑优化。retrieve 对账应以返回文件数为界，prepare 保持分页；测量指纹/状态 I/O、协调及竞争开销，不预设提速。
+## 影响与验证 {#validation}
 
-## 审阅与交付 {#review}
+描述不变且没有新增片段文本的清空无需新增正文 embedding。现有按 track 列表、逐 segment 删除成本保留。本地落盘增加空正文判断，可能 unlink 正常镜像路径；此范围不需要冲突跟踪、新 manifest 格式或同步协议。按相关检查记录影响，不宣称已提速。
 
-先审阅显式输入/目标契约、元数据可见性、受管理文件证明/竞争、部分成功状态、并发/恢复限制；再以小型可独立审阅提交实现，双语记录决定和测试证据。保持三个入口、scope 校验，契约改变时按适用范围保持后端一致。真实 Postgres 和托管结论仍需相应检查。
+使用合成 scoped 记录及临时目录，覆盖空/空白 memory、保留 ID/description、零 segments 与检索排除、旧镜像移除、不生成空壳、不提供不存在的检索路径、skill/非空写入保持不变、后端失败及本地缺失。真实 Postgres 和托管行为需独立隔离验证，inmemory 测试不能证明其原子性。
 
-PR #816 当前仅含设计文档，不授权发布、部署、生产清洗或自动创建后续任务。个人记忆不是测试语料。本次修订只核实源码和文档；MEM-16 实验及此前回归结果不代表本提案行为已获验收。
+## 交付 {#delivery}
+
+PR #816 当前仅含设计文档。按小型提交实现已约定行为，双语同步测试结果，保持仓库 scope 校验及适用后端一致要求。本文不授权生产记忆清洗、发布或部署。
