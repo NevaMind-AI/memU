@@ -1,9 +1,9 @@
-# ADR 0025：通过 commit 显式清空 memory 与安全维护本地镜像
+# ADR 0024：通过 commit 显式清空 memory 与安全维护本地镜像
 
 - 状态：提案；实现前审阅契约
 - 议题：MEM-13；设计交接来自 MEM-16
 - 关联：[ADR 0012](0012-cloud-backed-agentic-backend.md)、[ADR 0014](0014-paginated-list-all-recall-files.md)
-- [English](0025-memory-clearing-through-commit.md)
+- [English](0024-memory-clearing-through-commit.md)
 
 ## 目标与边界 {#goal}
 
@@ -11,7 +11,7 @@
 
 共同服务流程继续使用 `AgenticMixin`。memU 支持调用方管理的 user/agent scope，也支持多个用户；托管产品额外绑定鉴权后的组织/项目租户，使用不同 UUID 模型、segment 身份/位置约束、审计及事务所有权。两侧仓库继续独立拥有。
 
-公共入口仍为 `list_all_recall_files`、`progressive_retrieve`、`commit_results`，服务保持 embedding-only。`skill` 和 `resource` 单独决策。PR #814 继续暂停。
+公共入口仍为 `list_all_recall_files`、`progressive_retrieve`、`commit_results`，服务保持 embedding-only。`skill` 和 `resource` 单独决策。PR #814 已关闭。
 
 ## 当前证据 {#evidence}
 

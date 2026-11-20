@@ -1,9 +1,9 @@
-# ADR 0025: Explicit memory clearing through commit and safe local mirrors
+# ADR 0024: Explicit memory clearing through commit and safe local mirrors
 
 - Status: Proposed; contract review before implementation
 - Task: MEM-13; design handoff from MEM-16
 - Related: [ADR 0012](0012-cloud-backed-agentic-backend.md), [ADR 0014](0014-paginated-list-all-recall-files.md)
-- [中文](0025-memory-clearing-through-commit.zh.md)
+- [中文](0024-memory-clearing-through-commit.zh.md)
 
 ## Goal and boundary {#goal}
 
@@ -11,7 +11,7 @@ Reduce obsolete memory content in segment retrieval and managed local files thro
 
 The common service flow remains `AgenticMixin`. memU supports caller-managed user/agent scopes, including multiple users; the hosted product additionally binds authenticated organization/project tenants and uses distinct UUID models, segment identity/position constraints, audit and transaction ownership. Their repositories remain independently owned.
 
-The public surface remains `list_all_recall_files`, `progressive_retrieve`, `commit_results`; the service remains embedding-only. `skill` and `resource` require separate decisions. PR #814 remains paused.
+The public surface remains `list_all_recall_files`, `progressive_retrieve`, `commit_results`; the service remains embedding-only. `skill` and `resource` require separate decisions. PR #814 is closed.
 
 ## Current evidence {#evidence}
 
