@@ -53,4 +53,8 @@ Use synthetic scoped records and temporary directories. Cover empty/whitespace m
 
 ## Delivery {#delivery}
 
-PR #816 currently contains design documentation. Implement only the agreed behavior in small commits, update both languages with test results, and preserve repository scope-validation and applicable backend-parity requirements. No production memory cleanup, release or deployment is authorized by this document.
+Implemented in PR #816: the common writer removes/omits empty memory mirrors; retrieval handles the optional path; bridging and developer memorize commits remove submitted empty memory paths after backend success, before their existing snapshots. Nonempty writes, skill behavior and current state/error handling are retained.
+
+Validation: **219 passed, 1 skipped** across `test_agentic`, `test_bridging_promotion`, `test_bridging_resources`, `test_host_retrieval`, `test_memorize_lifecycle`, `test_memorize_cli` and `test_retrieval_cleanup`. The skip requires Windows symlink privileges. Ruff check/format passed for changed Python files; mypy passed for 239 source files. Agentic behavior checks run against inmemory and SQLite with fake embeddings. Hosted/Cloud and real Postgres were not exercised; no new database protocol or schema is introduced.
+
+No production memory cleanup, release or deployment was performed. Review remains required.

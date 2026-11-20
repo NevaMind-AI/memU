@@ -53,4 +53,8 @@
 
 ## 交付 {#delivery}
 
-PR #816 当前仅含设计文档。按小型提交实现已约定行为，双语同步测试结果，保持仓库 scope 校验及适用后端一致要求。本文不授权生产记忆清洗、发布或部署。
+PR #816 已实现：共同 writer 移除/跳过空 memory 镜像，retrieve 处理可空路径，bridging 与 developer memorize commit 在后端成功后、现有快照之前移除本次提交的空 memory 路径。保留非空写入、skill 行为及现有状态/错误处理。
+
+验证：`test_agentic`、`test_bridging_promotion`、`test_bridging_resources`、`test_host_retrieval`、`test_memorize_lifecycle`、`test_memorize_cli`、`test_retrieval_cleanup` 共 **219 passed，1 skipped**；跳过项需要 Windows 符号链接权限。改动 Python 文件 Ruff check/format 通过，mypy 对 239 个源文件检查通过。Agentic 行为使用假 embedding，在 inmemory 和 SQLite 验证；未运行托管/Cloud 或真实 Postgres，不新增数据库协议或 schema。
+
+未操作生产记忆、发布或部署，仍待审阅。
