@@ -2,14 +2,14 @@
 
 - Status: Proposed; contract review before implementation
 - Task: MEM-13; design handoff from MEM-16
-- Related: [ADR 0025](0025-shared-postgres-core.md), [ADR 0012](0012-cloud-backed-agentic-backend.md), [ADR 0014](0014-paginated-list-all-recall-files.md)
+- Related: [ADR 0012](0012-cloud-backed-agentic-backend.md), [ADR 0014](0014-paginated-list-all-recall-files.md)
 - [中文](0026-memory-clearing-through-commit.zh.md)
 
 ## Goal and boundary {#goal}
 
 Reduce obsolete memory content in segment retrieval and managed local files through the existing `commit_results` workflow. The initial scope is an explicitly targeted, existing `memory` file: clear its body, retain its database identity, reconcile its segments and safely remove its empty local mirror. This is a proposed contract, not an implemented lifecycle feature or a recoverable-delete guarantee.
 
-The common service flow remains `AgenticMixin`. memU supports caller-managed user/agent scopes, including multiple users; the hosted product additionally binds authenticated organization/project tenants and uses distinct UUID models, segment identity/position constraints, audit and transaction ownership. Their repositories remain independently owned. Extracting shared Postgres repositories is not a prerequisite for this contract. The former A/B/C implementation sequence in ADR 0025 is inactive; MEM-16's index draft is paused and Part B/C are not scheduled by this proposal.
+The common service flow remains `AgenticMixin`. memU supports caller-managed user/agent scopes, including multiple users; the hosted product additionally binds authenticated organization/project tenants and uses distinct UUID models, segment identity/position constraints, audit and transaction ownership. Their repositories remain independently owned.
 
 The public surface remains `list_all_recall_files`, `progressive_retrieve`, `commit_results`; the service remains embedding-only. `skill` and `resource` require separate decisions. PR #814 remains paused.
 

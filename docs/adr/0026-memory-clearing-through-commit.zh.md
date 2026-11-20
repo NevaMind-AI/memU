@@ -2,14 +2,14 @@
 
 - 状态：提案；实现前审阅契约
 - 议题：MEM-13；设计交接来自 MEM-16
-- 关联：[ADR 0025](0025-shared-postgres-core.zh.md)、[ADR 0012](0012-cloud-backed-agentic-backend.md)、[ADR 0014](0014-paginated-list-all-recall-files.md)
+- 关联：[ADR 0012](0012-cloud-backed-agentic-backend.md)、[ADR 0014](0014-paginated-list-all-recall-files.md)
 - [English](0026-memory-clearing-through-commit.md)
 
 ## 目标与边界 {#goal}
 
 通过现有 `commit_results` 流程，减少过时记忆正文对片段召回和受管理本地文件的干扰。首批范围为明确指定的已有 `memory`：清空正文，保留数据库身份，对账 segments，并安全移除空正文的本地镜像。这是待审阅契约，尚未实现生命周期功能，也不保证可恢复删除。
 
-共同服务流程继续使用 `AgenticMixin`。memU 支持调用方管理的 user/agent scope，也支持多个用户；托管产品额外绑定鉴权后的组织/项目租户，使用不同 UUID 模型、segment 身份/位置约束、审计及事务所有权。两侧仓库继续独立拥有，抽取共享 Postgres 仓库不是本契约前置条件。ADR 0025 原 A/B/C 实现顺序停止推进，MEM-16 索引草稿暂停，本提案不安排 Part B/C。
+共同服务流程继续使用 `AgenticMixin`。memU 支持调用方管理的 user/agent scope，也支持多个用户；托管产品额外绑定鉴权后的组织/项目租户，使用不同 UUID 模型、segment 身份/位置约束、审计及事务所有权。两侧仓库继续独立拥有。
 
 公共入口仍为 `list_all_recall_files`、`progressive_retrieve`、`commit_results`，服务保持 embedding-only。`skill` 和 `resource` 单独决策。PR #814 继续暂停。
 
