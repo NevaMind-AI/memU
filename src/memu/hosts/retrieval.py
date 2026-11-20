@@ -98,8 +98,8 @@ def _shape_for_agent(result: dict[str, Any]) -> dict[str, Any]:
     for file in files:
         source = {key: file[key] for key in ("description", "track", "created_at", "updated_at") if key in file}
         subdir = TRACK_DIRS.get(file.get("track") or "")
-        if subdir is not None and file.get("name"):
-            source["path"] = str(write_recall_file(base, subdir, file))
+        if subdir is not None and file.get("name") and (path := write_recall_file(base, subdir, file)) is not None:
+            source["path"] = str(path)
         elif "content" in file:
             source["content"] = file["content"]
         sources[file["id"]] = source
