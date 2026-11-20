@@ -49,6 +49,27 @@
 
 证据入口：[比较版本的 memU 源码](https://github.com/NevaMind-AI/memU/tree/ee7e251f4cd5f4f984577edf3233e9358b921ed9/src/memu/database/postgres)、[hipp 同步 store](https://github.com/NevaMind-AI/hippocampus-server/blob/cca499a63d5404c156903fe9de37d076f504faca/services/memu-service/app/infrastructure/memu/store.py)、[hipp 异步仓库](https://github.com/NevaMind-AI/hippocampus-server/blob/cca499a63d5404c156903fe9de37d076f504faca/services/memu-service/app/infrastructure/persistence/repositories/memory_files.py)、[hipp 模型](https://github.com/NevaMind-AI/hippocampus-server/tree/cca499a63d5404c156903fe9de37d076f504faca/services/memu-service/app/infrastructure/persistence/models)。
 
+## 演进历史与能力保留 {#evolution}
+
+托管 checkout 在 `pyproject.toml`/`uv.lock` 固定 `memu-cli==0.11.0b3`，最后一次相关依赖更新为 hipp `d29332c6`（2026-08-21）。本轮把已发布 wheel 当 ZIP 读取源码，没有安装或执行它。SHA-256 `948972808846060c093c1a40fbd09b14ce6ee503169d733bb4eac8d0e42cac99` 与托管 lockfile 一致，PyPI 上传日期为 2026-08-21。这核实的是固定发布包，不是运行中的部署。仅凭 Git 日期或同名方法不足以判断包内能力。
+
+| 能力 / 变更 | 源码历史 | 固定 wheel 与 hipp 证据 | 保留 / 接入结论 |
+| --- | --- | --- | --- |
+| 原生 segment 仓库协议及 Postgres 排名 | memU [`edbd422`，#652](https://github.com/NevaMind-AI/memU/commit/edbd422fcd925b3ddc57f0c84fbf24e5bb4e51b3)，2026-08-18 | Wheel 已有 `vector_search_segments`；hipp 在同日 `ad803d4a`（#644）独立增加原生排名及 host 覆盖 | 属于集成分叉，不是固定包缺能力。接入共享协议，保留原生 SQL 排名和本地 fallback 支持 |
+| 写前 embedding 规划/批处理，resource 原位更新 | memU [`57399e5`，#651](https://github.com/NevaMind-AI/memU/commit/57399e5)，2026-08-21 | Wheel 已有 `_EmbeddingBatch` 和资源更新调用；hipp `d29332c6` 增加空资源 update 适配 | 固定包已有。保留 provider 失败不先写入、批处理/去重及本地资源身份；托管禁用资源策略另行保留 |
+| 分页输入校验 | memU [`abb1148`，#663](https://github.com/NevaMind-AI/memU/commit/abb11480e69cec9ca35d954b1c1ffc83ef11c100)，2026-08-26 | Wheel 没有后来的 mixin limit 校验；托管 HTTP 另有页大小约束 | 后续共同核心校验。直接本地/托管 mixin 调用都要保留，HTTP 校验是补充 |
+| 仅按命中 ID 读取文件 `id__in` | memU [`385bdb3`，#694](https://github.com/NevaMind-AI/memU/commit/385bdb30cda7f5265368934b8008ce2b73283283)，2026-09-04 | Wheel 没有有界命中 ID 汇总；hipp `ad803d4a` 已有独立有界辅助方法 | 后续开源能力与已有托管优化趋同。采用当前 mixin 有界读取，保持不扫描整个 scope |
+| 去重/查找前规范化大小写和分隔符 | memU [`42ef9fa`，#733](https://github.com/NevaMind-AI/memU/commit/42ef9fa3a8034f5817684cba23ef69fa70a58197)，2026-10-16 | Wheel 没有当前 lower/空格/下划线规范化链 | 后续核心行为。保留规范化查找/去重及已有名称兼容，升级前审阅产品历史名称碰撞 |
+| 确认成功/写入前拒绝空名称与非法名称 | memU [`dec8676`，#803](https://github.com/NevaMind-AI/memU/commit/dec867612ea0c70a45c4af9cc1cef8b28fe0a61f)，2026-11-10 | Wheel 缺少后来的空名称拒绝诊断/保护；当前源码/测试在规划时拒绝非法输入 | 后续正确性保障。保留 provider/存储操作前的整批输入校验，以及拒绝后 host 状态可重试 |
+| 原子写入/重新规划与读快照 | memU [`9e2af33`，#805](https://github.com/NevaMind-AI/memU/commit/9e2af332a58d32a830483aadc02fe58bfbefc94a)，2026-11-14 | Wheel 无 `AtomicDatabase`；该提交为 SQLite/inmemory 增加保障，两套 Postgres 均未实现 | 后续能力，但后端范围明确。保留 SQLite/inmemory 保障，Postgres 需新增并验证事务参与，不能削弱 mixin 或声称目前已一致 |
+| 托管约束、位置、审计、资源策略 | 当前比较版本的产品 schema/适配器 | 独立产品需求；这些证据不把每项归类为后续 memU 变更 | 按处理结论表保留，不强塞进默认本地 schema |
+
+这些日期证明上述具名变更，不是完整发布日志。未追溯引入历史的模型/ID/缓存差异仍按当前职责分类，不推断先后。完整升级验证仍需要依赖审阅和隔离运行测试。
+
+本文档分支的能力保留基线：`uv run python -m pytest tests/test_agentic.py tests/test_segment_vector_search.py tests/test_commit_concurrency.py tests/test_commit_thread_isolation.py -q` 结果为 **133 passed, 4 skipped**。四项 Postgres 单元检查因未安装 `pgvector` 跳过；未验证真实 Postgres 或托管集成。
+
+**升级验收应在各部署既有支持能力上增量进行。** 保留当前 memU 的原生 segment 路由与 fallback、有界文件汇总、分页校验、名称规范化/拒绝、批处理及 provider 失败、本地资源、可配置 scope 模型、SQLite/inmemory 原子性测试。新增产品集成检查，不删除或放宽上述断言。任何已有行为变更都需独立审阅兼容/迁移决定。Step 1 同时记录发布包基线与能力保留清单；Step 2–6 以当前共同核心行为和保留的产品策略作为验收依据，不能把旧包当作所有能力的统一基准。
+
 ## 各项差异的处理结论 {#disposition}
 
 以下建议结论约束前述比较和六步计划。**共享实现**表示复用通用记忆代码；**仅对齐契约**允许存储/运行实现不同；**保留在 hipp**明确长期产品归属。同一项可以同时包含可复用操作和产品自有策略。
