@@ -51,16 +51,20 @@ def recall_file_path(base_dir: Path, subdir: str, name: str) -> Path:
     return base_dir / subdir / f"{name.replace(' ', '-')}.md"
 
 
-def write_recall_file(base_dir: Path, subdir: str, recall_file: dict[str, Any]) -> Path:
-    """Mirror one recall file into ``base_dir/subdir`` as front-mattered markdown."""
+def write_recall_file(base_dir: Path, subdir: str, recall_file: dict[str, Any]) -> Path | None:
+    """Mirror a recall file, or remove its mirror when a memory body is empty."""
     name = recall_file["name"]
     description = recall_file.get("description", "")
     content = recall_file.get("content") or ""
 
+    out_path = recall_file_path(base_dir, subdir, name)
+    if subdir == "memory" and not content.strip():
+        out_path.unlink(missing_ok=True)
+        return None
+
     out_dir = base_dir / subdir
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    out_path = recall_file_path(base_dir, subdir, name)
     _atomic_write_text(out_path, f"---\nname: {name}\ndescription: {description}\n---\n{content}")
     return out_path
 

@@ -147,6 +147,34 @@ async def test_recommit_updates_content_and_segments(service: MemoryService) -> 
     assert "likes coffee" not in [seg["text"] for seg in result["segments"]]
 
 
+@pytest.mark.parametrize("content", ["", " \n\t"])
+async def test_empty_memory_commit_preserves_identity_and_clears_segments(service: MemoryService, content: str) -> None:
+    seeded = await service.commit_results(
+        user={"user_id": "u1"},
+        recall_files=[
+            {"name": "coffee", "track": "memory", "description": "old description", "content": "coffee daily"},
+            {"name": "coffee", "track": "skill", "description": "coffee skill", "content": "steps"},
+        ],
+    )
+    await service.commit_results(
+        user={"user_id": "u2"}, recall_files=[{"name": "coffee", "content": "coffee elsewhere"}]
+    )
+    result = await service.commit_results(
+        user={"user_id": "u1"},
+        recall_files=[{"name": "coffee", "track": "memory", "description": "", "content": content}],
+    )
+    cleared = result["recall_files"][0]
+    assert cleared["id"] == seeded["recall_files"][0]["id"]
+    assert cleared["content"] == ""
+    assert cleared["description"] == "old description"
+    assert service.database.recall_file_segment_repo.list_segments_for_file(cleared["id"]) == []
+    hits = await service.progressive_retrieve("coffee", where={"user_id": "u1"})
+    assert cleared["id"] not in [file["id"] for file in hits["files"]]
+    assert [file["track"] for file in hits["files"]] == ["skill"]
+    other = await service.list_all_recall_files(where={"user_id": "u2"})
+    assert other["recall_files"][0]["content"] == "coffee elsewhere"
+
+
 async def test_cleanup_failure_retry_cannot_overwrite_a_later_commit(
     service: MemoryService, tmp_path: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:

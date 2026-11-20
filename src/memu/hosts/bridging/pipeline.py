@@ -157,6 +157,10 @@ async def commit(layout: Layout) -> dict[str, Any]:
     backend = build_agentic_memory_backend_from_env()
     result: dict[str, Any] = await backend.commit_results(recall_files=recall_files, resource=resources)
 
+    for path, recall_file in zip(changed, recall_files, strict=True):
+        if recall_file["track"] == "memory" and not recall_file["content"].strip():
+            path.unlink(missing_ok=True)
+
     snapshot_tracked(layout.base, layout.track_dirs, layout.memory_manifest)
     pending = layout.session_manifest_pending
     if pending.exists():

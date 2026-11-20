@@ -182,6 +182,9 @@ async def commit_memorize(workspace: MemorizeWorkspace, backend: AgenticMemoryBa
         raise RuntimeError(msg) from exc
 
     try:
+        for path, recall_file in zip(changed, recall_files, strict=True):
+            if recall_file["track"] == "memory" and not recall_file["content"].strip():
+                path.unlink(missing_ok=True)
         snapshot_tracked(workspace.base, workspace.track_dirs, workspace.manifest)
         for stale in workspace.jobs.glob("*.txt"):
             stale.unlink()

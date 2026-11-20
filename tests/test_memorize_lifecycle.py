@@ -68,6 +68,26 @@ def embedded_templates(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(lifecycle_module.templates, "resolve", lambda _name, embedded: embedded)
 
 
+@pytest.mark.parametrize("fail", [False, True])
+async def test_commit_empty_memory_cleanup(tmp_path: Path, fail: bool) -> None:
+    backend = FakeBackend()
+    workspace = MemorizeWorkspace(tmp_path / "workspace")
+    await prepare_memorize(_input(), workspace, backend, verify_command="memu verify")
+    workspace.memory.mkdir(exist_ok=True)
+    path = workspace.memory / "empty.md"
+    path.write_text("---\nname: empty\n---\n \t\n", encoding="utf-8")
+    backend.fail_commit = fail
+    if fail:
+        with pytest.raises(RuntimeError, match="commit failed"):
+            await commit_memorize(workspace, backend)
+        assert path.exists()
+        assert workspace.active_run.exists()
+    else:
+        await commit_memorize(workspace, backend)
+        assert not path.exists()
+        assert "memory/empty.md" not in workspace.manifest.read_text(encoding="utf-8")
+
+
 async def test_prepare_mirrors_all_pages_and_returns_ordered_jobs(tmp_path: Path) -> None:
     backend = FakeBackend([
         [{"name": "profile", "track": "memory", "description": "user profile", "content": "likes tea"}],
