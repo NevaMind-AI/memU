@@ -1,9 +1,9 @@
-# ADR 0026: Explicit memory clearing through commit and safe local mirrors
+# ADR 0025: Explicit memory clearing through commit and safe local mirrors
 
 - Status: Proposed; contract review before implementation
 - Task: MEM-13; design handoff from MEM-16
 - Related: [ADR 0012](0012-cloud-backed-agentic-backend.md), [ADR 0014](0014-paginated-list-all-recall-files.md)
-- [中文](0026-memory-clearing-through-commit.zh.md)
+- [中文](0025-memory-clearing-through-commit.zh.md)
 
 ## Goal and boundary {#goal}
 

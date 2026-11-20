@@ -1,9 +1,9 @@
-# ADR 0026：通过 commit 显式清空 memory 与安全维护本地镜像
+# ADR 0025：通过 commit 显式清空 memory 与安全维护本地镜像
 
 - 状态：提案；实现前审阅契约
 - 议题：MEM-13；设计交接来自 MEM-16
 - 关联：[ADR 0012](0012-cloud-backed-agentic-backend.md)、[ADR 0014](0014-paginated-list-all-recall-files.md)
-- [English](0026-memory-clearing-through-commit.md)
+- [English](0025-memory-clearing-through-commit.md)
 
 ## 目标与边界 {#goal}
 
