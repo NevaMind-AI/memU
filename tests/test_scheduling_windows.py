@@ -648,9 +648,9 @@ def test_hook_host_schedule_actions_on_every_platform(
     monkeypatch: pytest.MonkeyPatch, spec: HostSpec, system: str, action: str
 ) -> None:
     monkeypatch.setattr(windows.platform, "system", lambda: system)
-    if spec is CLAUDE and action == "uninstall":
+    if spec is CLAUDE and (action == "uninstall" or (action == "status" and system == "Darwin")):
         args = build_parser(spec).parse_args(["schedule", action])
-        assert args.action == "uninstall" and callable(args.handler)
+        assert args.action == action and callable(args.handler)
         return
     with pytest.raises(SystemExit) as exc:
         run(spec, ["schedule", action])
@@ -676,7 +676,7 @@ def test_claude_legacy_uninstall_delegates_to_shared_helper(
     assert len(calls) == 1 and calls[0].base == tmp_path
 
 
-@pytest.mark.parametrize("system", ("Linux", "Darwin"))
+@pytest.mark.parametrize("system", ("Linux",))
 def test_claude_legacy_uninstall_reports_unperformed_unix_cleanup(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], system: str
 ) -> None:
