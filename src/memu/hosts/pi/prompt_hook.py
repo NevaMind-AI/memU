@@ -15,7 +15,24 @@ from uuid import uuid4
 
 from memu.env import LONG_QUERY_CHARS
 from memu.hosts.pi.query_extraction import select_query
+from memu.hosts.query_extraction import ExtractionCancellation
 from memu.hosts.retrieval import QueryKind, render_context, retrieve
+
+
+async def _select_query(prompt: str, trace: dict[str, Any], event: dict[str, Any]) -> str:
+    cancel = ExtractionCancellation()
+    worker = asyncio.create_task(
+        asyncio.to_thread(
+            select_query, prompt, trace, provider=event.get("provider"), model=event.get("model"), cancel=cancel
+        )
+    )
+    try:
+        return await asyncio.shield(worker)
+    except asyncio.CancelledError:
+        # Cancelling the await does not stop the synchronous extractor's thread.
+        cancel.cancel()
+        await asyncio.gather(worker, return_exceptions=True)
+        raise
 
 
 async def prompt_hook(args: argparse.Namespace) -> int:
@@ -34,9 +51,7 @@ async def prompt_hook(args: argparse.Namespace) -> int:
             for name in ("provider", "model"):
                 if event.get(name) is not None and not isinstance(event[name], str):
                     raise TypeError(f"Expected {name} to be a string")  # noqa: TRY003, TRY301
-            query = await asyncio.to_thread(
-                select_query, prompt, trace, provider=event.get("provider"), model=event.get("model")
-            )
+            query = await _select_query(prompt, trace, event)
             kind: QueryKind = (
                 "extracted"
                 if trace.get("query_source") == "extracted"

@@ -13,11 +13,26 @@ from typing import Any
 from memu.hosts import query_extraction
 
 
-def select_query(prompt: str, trace: dict[str, Any], *, provider: str | None = None, model: str | None = None) -> str:
-    return query_extraction.select_query(prompt, trace, lambda text: _extract(text, provider=provider, model=model))
+def select_query(
+    prompt: str,
+    trace: dict[str, Any],
+    *,
+    provider: str | None = None,
+    model: str | None = None,
+    cancel: query_extraction.ExtractionCancellation | None = None,
+) -> str:
+    return query_extraction.select_query(
+        prompt, trace, lambda text: _extract(text, provider=provider, model=model, cancel=cancel)
+    )
 
 
-def _extract(prompt: str, *, provider: str | None = None, model: str | None = None) -> str:
+def _extract(
+    prompt: str,
+    *,
+    provider: str | None = None,
+    model: str | None = None,
+    cancel: query_extraction.ExtractionCancellation | None = None,
+) -> str:
     binary = shutil.which("pi")
     if not binary:
         raise FileNotFoundError("pi is not on PATH")  # noqa: TRY003
@@ -45,5 +60,6 @@ def _extract(prompt: str, *, provider: str | None = None, model: str | None = No
             Path(directory),
             getattr(subprocess, "CREATE_NO_WINDOW", 0),
             env={**os.environ, "MEMU_BRIDGING_RUN": "1"},
+            cancel=cancel,
         )
     return query_extraction.validate_query(json.loads(output.decode("utf-8")))

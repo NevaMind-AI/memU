@@ -1,0 +1,39 @@
+name: Query extraction lifecycle
+
+on:
+  push:
+    paths:
+      - .github/workflows/query-extraction.yml
+      - src/memu/hosts/*extraction*.py
+      - src/memu/hosts/**/query_extraction.py
+      - src/memu/hosts/pi/prompt_hook.py
+      - tests/test_*query_extraction*.py
+      - pyproject.toml
+      - uv.lock
+  pull_request:
+    paths:
+      - .github/workflows/query-extraction.yml
+      - src/memu/hosts/*extraction*.py
+      - src/memu/hosts/**/query_extraction.py
+      - src/memu/hosts/pi/prompt_hook.py
+      - tests/test_*query_extraction*.py
+      - pyproject.toml
+      - uv.lock
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+      - run: uv sync --frozen --no-dev --group test
+      - run: uv run --no-sync pytest tests/test_query_extraction_lifecycle.py tests/test_query_extraction.py tests/test_codex_query_extraction.py tests/test_claude_query_extraction.py tests/test_pi_query_extraction.py
