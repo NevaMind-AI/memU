@@ -24,3 +24,4 @@
 - [0022: Shared Host Hooks for Retrieval and Memorization](0022-host-memory-hooks.md)
 - [0023: Remove Cola and Generic Host Adapters](0023-remove-cola-generic-adapters.md)
 - [0024: Empty Memory Bodies Through Commit and Local Mirroring (Proposed)](0024-memory-clearing-through-commit.md) · [中文](0024-memory-clearing-through-commit.zh.md)
+- [0025: Persist the Evolve Selection for Each Developer Memorize Run](0025-developer-evolve-selection.md) · [中文](0025-developer-evolve-selection.zh.md)

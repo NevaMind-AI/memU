@@ -166,7 +166,7 @@ def prepare_instruction_jobs(
     num_sessions: int,
     *,
     memory_template: str = MEMORY_JOB_TEMPLATE,
-    skill_template: str = SKILL_JOB_TEMPLATE,
+    skill_template: str | None = SKILL_JOB_TEMPLATE,
 ) -> None:
     """Write per-session job-instruction files under ``job_dir``.
 
@@ -179,6 +179,7 @@ def prepare_instruction_jobs(
     ``memory_template``/``skill_template`` default to the embedded constants and
     are overridden by :func:`~memu.hosts.bridging.pipeline.prepare` with the
     server's current copy when it is reachable (:mod:`memu.hosts.templates`).
+    Pass ``skill_template=None`` to generate only the memory jobs.
     """
     job_dir.mkdir(parents=True, exist_ok=True)
     for stale in job_dir.glob("*.txt"):
@@ -191,10 +192,11 @@ def prepare_instruction_jobs(
         )
         (job_dir / f"{idx}.txt").write_text(instruction, encoding="utf-8")
 
-    for idx in range(1, num_sessions + 1):
-        instruction = skill_template.format(
-            input_path=session_dir / f"{idx}_full.jsonl",
-            track_dir=skill_dir,
-            resource_log=resource_log,
-        )
-        (job_dir / f"{num_sessions + idx}.txt").write_text(instruction, encoding="utf-8")
+    if skill_template is not None:
+        for idx in range(1, num_sessions + 1):
+            instruction = skill_template.format(
+                input_path=session_dir / f"{idx}_full.jsonl",
+                track_dir=skill_dir,
+                resource_log=resource_log,
+            )
+            (job_dir / f"{num_sessions + idx}.txt").write_text(instruction, encoding="utf-8")

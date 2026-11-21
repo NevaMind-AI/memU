@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from memu.agentic_backend import AgenticMemoryBackend
 from memu.app.memorize.input import MemorizeInput
@@ -88,11 +88,24 @@ def _numeric_path_key(path: Path) -> int:
     return int(path.stem)
 
 
-async def _mirror_recall_files(backend: AgenticMemoryBackend, workspace: MemorizeWorkspace) -> None:
+def _selected_track_dirs(workspace: MemorizeWorkspace, selection: str) -> list[str]:
+    if selection == "memory":
+        return [TRACK_DIRS["memory"]]
+    if selection == "all":
+        return workspace.track_dirs
+    msg = f"unknown evolve selection: {selection!r}"
+    raise ValueError(msg)
+
+
+async def _mirror_recall_files(
+    backend: AgenticMemoryBackend, workspace: MemorizeWorkspace, *, only: Literal["memory"] | None = None
+) -> None:
     cursor: str | None = None
     while True:
         result = await backend.list_all_recall_files(cursor=cursor)
         for recall_file in result["recall_files"]:
+            if only is not None and recall_file.get("track") != only:
+                continue
             subdir = TRACK_DIRS.get(recall_file.get("track"))
             if subdir is not None:
                 write_recall_file(workspace.base, subdir, recall_file)
@@ -107,9 +120,13 @@ async def prepare_memorize(
     backend: AgenticMemoryBackend,
     *,
     verify_command: str,
+    only: Literal["memory"] | None = None,
 ) -> PreparedMemorizeRun:
     """Prepare one batch of developer sessions for external self-evolve work."""
 
+    if only is not None and only != "memory":
+        msg = "only must be 'memory' or None"
+        raise ValueError(msg)
     memorize_inputs = [memorize_input] if isinstance(memorize_input, MemorizeInput) else memorize_input
     if not memorize_inputs:
         msg = "at least one memorize input is required"
@@ -120,11 +137,13 @@ async def prepare_memorize(
 
     workspace.base.mkdir(parents=True, exist_ok=True)
     transcripts = materialize_memorize_inputs(memorize_inputs, workspace.input)
-    await _mirror_recall_files(backend, workspace)
-    snapshot_tracked(workspace.base, workspace.track_dirs, workspace.manifest)
+    await _mirror_recall_files(backend, workspace, only=only)
+    track_dirs = _selected_track_dirs(workspace, only or "all")
+    snapshot_tracked(workspace.base, track_dirs, workspace.manifest)
 
-    workspace.resource_log.unlink(missing_ok=True)
-    workspace.resources.unlink(missing_ok=True)
+    if only is None:
+        workspace.resource_log.unlink(missing_ok=True)
+        workspace.resources.unlink(missing_ok=True)
     num_sessions = len(memorize_inputs)
     prepare_instruction_jobs(
         job_dir=workspace.jobs,
@@ -134,19 +153,24 @@ async def prepare_memorize(
         resource_log=workspace.resource_log,
         num_sessions=num_sessions,
         memory_template=templates.resolve(templates.MEMORY_JOB, MEMORY_JOB_TEMPLATE),
-        skill_template=templates.resolve(templates.SKILL_JOB, SKILL_JOB_TEMPLATE),
+        skill_template=templates.resolve(templates.SKILL_JOB, SKILL_JOB_TEMPLATE) if only is None else None,
     )
-    prepare_resource_job(
-        job_dir=workspace.jobs,
-        verify_command=verify_command,
-        resource_file=workspace.resources,
-        job_index=num_sessions * 2 + 1,
-        template=templates.resolve(templates.RESOURCE_JOB, RESOURCE_JOB_TEMPLATE),
-    )
+    if only is None:
+        prepare_resource_job(
+            job_dir=workspace.jobs,
+            verify_command=verify_command,
+            resource_file=workspace.resources,
+            job_index=num_sessions * 2 + 1,
+            template=templates.resolve(templates.RESOURCE_JOB, RESOURCE_JOB_TEMPLATE),
+        )
 
     _atomic_write_text(
         workspace.active_run,
-        json.dumps({"schema_version": memorize_inputs[0].schema_version}, separators=(",", ":")) + "\n",
+        json.dumps(
+            {"schema_version": memorize_inputs[0].schema_version, "evolve_selection": only or "all"},
+            separators=(",", ":"),
+        )
+        + "\n",
     )
     jobs = sorted(workspace.jobs.glob("*.txt"), key=_numeric_path_key)
     return PreparedMemorizeRun(transcript=transcripts, jobs=jobs)
@@ -163,10 +187,13 @@ async def commit_memorize(workspace: MemorizeWorkspace, backend: AgenticMemoryBa
         msg = "memorize run already committed; do not resubmit; discard the stopped run"
         raise RuntimeError(msg)
 
+    # Old runs predate selection and retain their full commit behavior.
+    selection = marker.get("evolve_selection", "all")
+    track_dirs = _selected_track_dirs(workspace, selection)
     subdir_track = {subdir: track for track, subdir in TRACK_DIRS.items()}
-    changed = diff_tracked(workspace.base, workspace.track_dirs, workspace.manifest)
+    changed = diff_tracked(workspace.base, track_dirs, workspace.manifest)
     recall_files = [read_recall_file(path, subdir_track[path.relative_to(workspace.base).parts[0]]) for path in changed]
-    resources = read_resources(workspace.resources)
+    resources = read_resources(workspace.resources) if selection == "all" else []
     result = await backend.commit_results(recall_files=recall_files, resource=resources)
 
     # Persist the acknowledgement before cleanup can fail and leave a retryable run.
@@ -185,13 +212,14 @@ async def commit_memorize(workspace: MemorizeWorkspace, backend: AgenticMemoryBa
         for path, recall_file in zip(changed, recall_files, strict=True):
             if recall_file["track"] == "memory" and not recall_file["content"].strip():
                 path.unlink(missing_ok=True)
-        snapshot_tracked(workspace.base, workspace.track_dirs, workspace.manifest)
+        snapshot_tracked(workspace.base, track_dirs, workspace.manifest)
         for stale in workspace.jobs.glob("*.txt"):
             stale.unlink()
         for stale in workspace.input.glob("*.jsonl"):
             stale.unlink()
-        workspace.resource_log.unlink(missing_ok=True)
-        workspace.resources.unlink(missing_ok=True)
+        if selection == "all":
+            workspace.resource_log.unlink(missing_ok=True)
+            workspace.resources.unlink(missing_ok=True)
         workspace.active_run.unlink()
     except OSError as exc:
         msg = (

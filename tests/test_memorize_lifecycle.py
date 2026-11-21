@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -110,7 +111,10 @@ async def test_prepare_mirrors_all_pages_and_returns_ordered_jobs(tmp_path: Path
     assert str(prepared.transcript.memory_path) in prepared.jobs[0].read_text(encoding="utf-8")
     assert str(prepared.transcript.skill_path) in prepared.jobs[1].read_text(encoding="utf-8")
     assert "memu verify" in prepared.jobs[-1].read_text(encoding="utf-8")
-    assert workspace.active_run.read_text(encoding="utf-8") == '{"schema_version":"1.0"}\n'
+    assert json.loads(workspace.active_run.read_text(encoding="utf-8")) == {
+        "schema_version": "1.0",
+        "evolve_selection": "all",
+    }
 
 
 def test_prepared_run_accepts_single_transcript_constructor(tmp_path: Path) -> None:
