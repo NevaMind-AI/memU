@@ -163,6 +163,29 @@ Adding another host means implementing one `TranscriptSource` (where its session
 
 Use `memu memorize` to turn application-owned conversations into memory and skills.
 
+To update only user memory, select it when preparing the run:
+
+```bash
+memu memorize prepare session.json --only memory --json
+```
+
+Execute every returned job, then run `memu memorize commit <run-id>` with the
+returned `run_id`. For N sessions (1–10), memory-only prepares N memory jobs;
+without `--only`, the complete flow prepares 2N + 1 memory, skill, and resource
+jobs. Python callers can pass `only="memory"` to `prepare_memorize()`.
+
+The evolve selection stays with the run through commit. Memory-only ignores
+extra skill files and resource lists, even if malformed, and submits only memory.
+Successful CLI commit still removes the entire private run, including ignored
+artifacts; the Python lifecycle retains its caller-owned directory and leaves
+unselected skill and resource artifacts untouched. Canonical input, both
+transcript projections, and existing response fields are unchanged. Finish or
+discard memory-only runs before downgrading: older versions do not honor their
+selection when committing.
+See [ADR 0025](docs/adr/0025-developer-evolve-selection.md)
+([中文说明](docs/adr/0025-developer-evolve-selection.zh.md)) for the selection and
+compatibility contract.
+
 ## CLI
 
 With memU Cloud, sign in at [memu.so](https://memu.so) to view your memory files. With a local installation, memory lives in the shared store configured by `MEMU_DB` in `~/.memu/config.env` — typically `~/.memu/memu.sqlite3` for local SQLite, or a Postgres DSN.

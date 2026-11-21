@@ -237,7 +237,9 @@ async def _cmd_memorize_prepare(args: argparse.Namespace) -> int:
     run_id = workspace.base.name
     verify_command = f"memu memorize verify-resources {run_id}"
     try:
-        prepared = await prepare_memorize(memorize_inputs, workspace, backend, verify_command=verify_command)
+        prepared = await prepare_memorize(
+            memorize_inputs, workspace, backend, verify_command=verify_command, only=args.only
+        )
     except BaseException:
         # No executor has received this freshly allocated run yet.
         shutil.rmtree(workspace.base)
@@ -351,6 +353,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = memorize_actions.add_parser("prepare", help="Prepare self-evolve jobs from 1-10 conversation sessions")
     p.add_argument("payloads", nargs="+", help='1-10 MemorizeInput JSON files, or "-" for stdin')
+    p.add_argument(
+        "--only", choices=["memory"], help="Evolve and commit only memory; defaults to the complete workflow"
+    )
     _add_common_options(p)
     p.set_defaults(handler=_cmd_memorize_prepare)
 
