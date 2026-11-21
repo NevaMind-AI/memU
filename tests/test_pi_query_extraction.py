@@ -1,8 +1,10 @@
 """pi extraction isolation, output validation, and hook routing."""
 
 import argparse
+import asyncio
 import io
 import json
+import threading
 from typing import Any
 
 import pytest
@@ -47,6 +49,7 @@ def test_pi_request_and_validation(result, monkeypatch):
 @pytest.mark.asyncio
 async def test_hook_routes_extracted_query(tmp_path, monkeypatch, capsys):
     def extract(prompt, **kwargs):
+        assert isinstance(kwargs.pop("cancel"), query_extraction.ExtractionCancellation)
         assert kwargs == {"provider": "provider", "model": "model"}
         return "topic"
 
@@ -64,3 +67,38 @@ async def test_hook_routes_extracted_query(tmp_path, monkeypatch, capsys):
     trace = json.loads(next((tmp_path / "log/hooks/retrieve").glob("*.json")).read_text(encoding="utf-8"))
     assert trace["query_source"] == "extracted"
     assert trace["query_truncated"] is False
+
+
+async def test_hook_cancellation_reaches_extraction_without_retrieval(tmp_path, monkeypatch, capsys):
+    loop = asyncio.get_running_loop()
+    started = asyncio.Event()
+    finished = threading.Event()
+
+    def extract(_prompt, *, cancel, **_kwargs):
+        loop.call_soon_threadsafe(started.set)
+        try:
+            while not finished.wait(0.01):
+                cancel.check()
+            pytest.fail("extraction was not cancelled")
+        finally:
+            finished.set()
+
+    async def retrieve(*_args, **_kwargs):
+        pytest.fail("cancelled extraction started retrieval")
+
+    monkeypatch.setattr(pi, "_extract", extract)
+    monkeypatch.setattr(prompt_hook, "retrieve", retrieve)
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"prompt": "x" * 600})))
+    task = asyncio.create_task(prompt_hook.prompt_hook(argparse.Namespace(base_dir=str(tmp_path))))
+    try:
+        await asyncio.wait_for(started.wait(), timeout=2)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(task, timeout=2)
+        assert finished.is_set()
+        assert capsys.readouterr().out == ""
+    finally:
+        finished.set()
+        if not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)

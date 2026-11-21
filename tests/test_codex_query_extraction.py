@@ -143,48 +143,50 @@ def test_real_process_stdin_and_nonzero_exit(tmp_path):
 
 def test_real_timeout_reaps_agent_tree(tmp_path, monkeypatch):
     monkeypatch.setattr(extraction, "EXTRACT_TIMEOUT", 2)
-    real_popen = subprocess.Popen
-    seen = []
-
-    def popen(argv, **kwargs):
-        if argv[0] != sys.executable:
-            return real_popen(argv, **kwargs)
-        assert kwargs["env"]["MEMU_CODEX_MEMORIZE"] == "1"
-        assert kwargs["env"]["MEMU_BRIDGING_RUN"] == "1"
-        assert kwargs["start_new_session"] is (sys.platform != "win32")
-        process = real_popen(argv, **kwargs)
-        seen.append(process)
-        return process
-
-    monkeypatch.setattr(extraction.subprocess, "Popen", popen)
     flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
     marker = tmp_path / "child.pid"
     script = (
-        "import pathlib,subprocess,sys,time; "
+        "import os,pathlib,subprocess,sys,time; "
+        "assert os.environ['MEMU_CODEX_MEMORIZE'] == '1'; "
+        "assert os.environ['MEMU_BRIDGING_RUN'] == '1'; "
         "child=subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)']); "
         "pathlib.Path(sys.argv[1]).write_text(str(child.pid)); time.sleep(60)"
     )
-    with pytest.raises(subprocess.TimeoutExpired):
-        extraction._run([sys.executable, "-c", script, str(marker)], b"", tmp_path, flags)
-    assert seen[0].poll() is not None
-    child_pid = marker.read_text()
-    if sys.platform == "win32":
-        result = subprocess.run(  # noqa: S603
-            ["tasklist", "/FI", f"PID eq {child_pid}", "/FO", "CSV", "/NH"],  # noqa: S607
-            capture_output=True,
-            check=True,
-            timeout=5,
-            creationflags=flags,
-        )
-        assert f'"{child_pid}"'.encode() not in result.stdout
-    else:
-        result = subprocess.run(  # noqa: S603
-            ["ps", "-o", "stat=", "-p", child_pid],  # noqa: S607
-            capture_output=True,
-            check=False,
-            timeout=5,
-        )
-        assert not result.stdout.strip() or result.stdout.strip().startswith(b"Z")
+    try:
+        with pytest.raises(subprocess.TimeoutExpired):
+            extraction._run([sys.executable, "-c", script, str(marker)], b"x" * 100_000, tmp_path, flags)
+        child_pid = marker.read_text()
+        if sys.platform == "win32":
+            result = subprocess.run(  # noqa: S603
+                ["tasklist", "/FI", f"PID eq {child_pid}", "/FO", "CSV", "/NH"],  # noqa: S607
+                capture_output=True,
+                check=True,
+                timeout=5,
+                creationflags=flags,
+            )
+            assert f'"{child_pid}"'.encode() not in result.stdout
+        else:
+            result = subprocess.run(  # noqa: S603
+                ["ps", "-o", "stat=", "-p", child_pid],  # noqa: S607
+                capture_output=True,
+                check=False,
+                timeout=5,
+            )
+            assert not result.stdout.strip() or result.stdout.strip().startswith(b"Z")
+    finally:
+        if marker.is_file():
+            child_pid = marker.read_text()
+            command = (
+                ["taskkill", "/PID", child_pid, "/T", "/F"] if sys.platform == "win32" else ["kill", "-KILL", child_pid]
+            )
+            subprocess.run(  # noqa: S603
+                command,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+                timeout=5,
+                creationflags=flags,
+            )
 
 
 def test_hook_retrieves_extracted_query_with_shared_deadline(tmp_path, monkeypatch, capsys):
