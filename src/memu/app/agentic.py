@@ -436,14 +436,17 @@ class AgenticMixin:
         if not deduped:
             return []
 
-        # One listing for the whole payload; this used to be re-read per item.
-        existing = list(store.resource_repo.list_resources(where=user_scope or None).values())
+        # Index only incoming URLs, preserving repository order for duplicate survivors.
+        existing_by_url: dict[str, list[Resource]] = {url: [] for url in deduped}
+        for resource in store.resource_repo.list_resources(where=user_scope or None).values():
+            if resource.url in existing_by_url:
+                existing_by_url[resource.url].append(resource)
         plans: list[_ResourcePlan] = []
         for url, item in deduped.items():
             caption = (item.get("description") or "").strip() or None
             # The first row for this url is the one the write keeps; any others are
             # duplicates an older commit path left behind.
-            matches = [res for res in existing if res.url == url]
+            matches = existing_by_url[url]
             current = matches[0] if matches else None
 
             caption_ticket = None
