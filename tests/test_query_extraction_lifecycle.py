@@ -263,6 +263,27 @@ def test_preserves_bytes_environment_and_working_directory(tmp_path: Path) -> No
     assert (tmp_path / "environment.txt").read_text(encoding="utf-8") == "synthetic-value"
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows cmd launcher")
+def test_cmd_launcher_receives_binary_input(tmp_path: Path) -> None:
+    (tmp_path / "echo_input.py").write_text(
+        "import sys\nsys.stdout.buffer.write(sys.stdin.buffer.read())\n", encoding="utf-8"
+    )
+    launcher = tmp_path / "extract query.cmd"
+    launcher.write_text('@"%MEMU_TEST_PYTHON%" "%~dp0echo_input.py"\n', encoding="ascii")
+    source = "中文\r\nsecond line\x1a\x00".encode()
+
+    assert (
+        query_extraction.run_extraction(
+            [str(launcher)],
+            source,
+            tmp_path,
+            subprocess.CREATE_NO_WINDOW,
+            env={**_environment(), "MEMU_TEST_PYTHON": sys.executable},
+        )
+        == source
+    )
+
+
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows Job assignment gate")
 def test_job_assignment_failure_falls_back_without_starting_extractor(tmp_path: Path, monkeypatch) -> None:
     from memu.hosts._extraction_job import WindowsExtractionJob

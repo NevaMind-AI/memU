@@ -65,19 +65,46 @@ def _group_has_only_zombies(group_id: int) -> bool:
     return all(state.startswith(b"Z") for state in states)
 
 
+if sys.platform == "darwin":
+
+    def _wait_darwin(process_id: int, lifetime_fd: int) -> None:
+        queue = select.kqueue()
+        try:
+            queue.control([select.kevent(lifetime_fd, filter=select.KQ_FILTER_READ, flags=select.KQ_EV_ADD)], 0, 0)
+            try:
+                queue.control(
+                    [
+                        select.kevent(
+                            process_id,
+                            filter=select.KQ_FILTER_PROC,
+                            flags=select.KQ_EV_ADD | select.KQ_EV_ONESHOT,
+                            fflags=select.KQ_NOTE_EXIT,
+                        )
+                    ],
+                    0,
+                    0,
+                )
+            except ProcessLookupError:
+                return  # The unreaped child exited before registration.
+            while True:
+                for event in queue.control(None, 2, None):
+                    if event.filter == select.KQ_FILTER_PROC or not os.read(lifetime_fd, 1):
+                        return
+        finally:
+            queue.close()
+
+
 def _wait_posix(process: subprocess.Popen[bytes], lifetime_fd: int) -> int:
-    # These waitid flags are available on supported macOS/Linux Python builds;
-    # Darwin typeshed does not expose all of them.
-    waitid = getattr(os, "waitid")  # noqa: B009
-    wait_options = getattr(os, "WEXITED") | os.WNOHANG | getattr(os, "WNOWAIT")  # noqa: B009
-    pid_kind = getattr(os, "P_PID")  # noqa: B009
     try:
-        while waitid(pid_kind, process.pid, wait_options) is None:
-            if _owner_exited(lifetime_fd, 0.025):
-                break
+        if sys.platform == "darwin":
+            _wait_darwin(process.pid, lifetime_fd)
+        else:
+            while os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT) is None:
+                if _owner_exited(lifetime_fd, 0.025):
+                    break
     finally:
-        # WNOWAIT retains the leader's PID until group cleanup, preventing a
-        # late kill from targeting an unrelated process after PID reuse.
+        # Neither exit observer reaps the leader. Retain its PID through group
+        # cleanup so a late kill cannot target a reused, unrelated PID.
         with suppress(ProcessLookupError):
             try:
                 os.killpg(process.pid, signal.SIGKILL)
@@ -98,8 +125,14 @@ def _run(lifetime_fd: int, flags: int) -> dict[str, int | str | None]:
         if lifetime_fd < 0:
             msg = "POSIX extraction requires an owner lifetime descriptor"
             raise ValueError(msg)
-        if any(not hasattr(os, name) for name in ("waitid", "WEXITED", "WNOHANG", "WNOWAIT", "P_PID")):
-            msg = "Extraction lifetime requires POSIX waitid with WNOWAIT"
+        primitives = (
+            ("kqueue", "kevent", "KQ_NOTE_EXIT")
+            if sys.platform == "darwin"
+            else ("waitid", "WEXITED", "WNOHANG", "WNOWAIT", "P_PID")
+        )
+        platform_module = select if sys.platform == "darwin" else os
+        if any(not hasattr(platform_module, name) for name in primitives):
+            msg = "Extraction lifetime requires a non-reaping POSIX exit observer"
             raise OSError(errno.ENOSYS, msg)
         os.set_inheritable(lifetime_fd, False)
         # A caller may ignore SIGCHLD; the runner must retain its own child
