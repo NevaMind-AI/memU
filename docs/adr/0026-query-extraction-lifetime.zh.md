@@ -29,4 +29,24 @@ POSIX runner 使用独立 session 跨越 hook 退出，监听专用父进程存�
 
 使用本地模拟提取程序及临时目录，覆盖成功、非零退出、超时、主动取消、hook 强制终止、重复清理、启动竞态、多级后代，并保留无关进程作为对照。验证 pi 的工作线程调用路径，断言取消后既不触发回退检索，也不交付旧结果。
 
-在 macOS、Linux 和 Windows 运行真实子进程测试。上游现有 CI 只覆盖 Linux。pi 的真实关闭、切换会话与 reload 验证单独记录。Codex、Claude 的真实宿主退出行为也需要分别提供证据。
+在 macOS、Linux 和 Windows 运行真实子进程测试。真实宿主行为与进程级测试分别记录。
+
+## 真实宿主退出验收
+
+在 macOS 26.6.2（arm64）验证运行时代码 `89810e1`。两个真实宿主均运行 memU 的 `UserPromptSubmit` 入口，Codex 使用 `async: true`，Claude Code 使用 `asyncRewake: true` 加 `--rewake`。测试使用临时工作区、回环地址上的模型和记忆端点，并在可执行文件发现处换入模拟提取器。模拟提取器启动一个休眠后代并报告 PID 后，才触发宿主退出。测试记录记忆请求，并在 hook 和宿主输出中检查唯一的上下文标记。
+
+| 宿主及动作 | 退出和投递观测 |
+| --- | --- |
+| Codex CLI `0.169.0-alpha.11.1`，`exec --ephemeral` 成功对照 | hook 记录 `context_returned`。第二次本地 `/v1/responses` 请求携带唯一上下文标记。宿主以状态 0 退出，hook、runner、提取器和后代均停止。 |
+| Codex CLI `0.169.0-alpha.11.1`，提取仍在运行时正常退出 | 本地模型返回完整响应后，宿主以状态 0 退出。退出后 2 秒检查时，hook、runner、提取器和后代均已停止。未观察到记忆检索请求、上下文标记或已完成的 hook 记录。 |
+| Codex CLI `0.169.0-alpha.11.1`，`exec --ephemeral` 期间收到 `SIGINT` | 宿主退出码为 1。退出后 2 秒检查时，hook、提取器和后代均已停止。模型请求已到本地端点，取消后未观察到记忆检索请求或已完成的 hook 记录。 |
+| Codex CLI `0.169.0-alpha.11.1`，仅向宿主发送 `SIGKILL` | 宿主退出码为 -9，2 秒后 hook 及其提取进程树仍在运行。测试程序清理这些进程前，未观察到记忆检索请求或上下文标记。 |
+| Claude Code `2.1.303`，正常结束 `-p --input-format stream-json` | 提取仍在运行时，本地模型已返回响应。stdin 收到 EOF 后 2 秒，宿主和提取进程树仍在运行。放行提取器后，hook 完成，宿主以状态 0 退出，hook、runner、提取器和后代均停止。唯一一次模型请求未携带上下文标记。 |
+| Claude Code `2.1.303`，`-p` 期间收到 `SIGTERM` | 宿主退出码为 143。600 ms 后检查时，hook、runner、提取器和后代均已停止。没有记忆检索请求或上下文标记。 |
+| Claude Code `2.1.303`，仅向宿主发送 `SIGKILL` | 宿主退出码为 -9，hook 及其提取进程树仍在运行。随后对该测试 hook 发送 `SIGTERM`，runner、提取器和后代均停止。此过程中没有记忆检索请求或上下文标记。 |
+
+Claude Code 成功对照中，本地记忆端点返回了上下文标记。真实 hook 记录 `context_returned`，宿主的 `UserPromptSubmit operation blocked by hook:` 输出包含该标记。这验证了该版本 `-p` 下可观测的 hook 到宿主输出通路。
+
+同版本 Codex 在隔离的 Linux arm64 容器中也通过了提取仍在运行时的正常退出测试。宿主退出时四个进程均已停止。测试端点仅收到一次未携带上下文标记的模型请求，未收到记忆检索请求。
+
+进程树清理由 hook 退出触发。仅强制结束宿主且 hook 仍存活时，hook 的存活管道保持打开。
