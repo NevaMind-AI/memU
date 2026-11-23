@@ -317,23 +317,67 @@ async def test_commit_embeds_everything_in_one_batched_call(service: MemoryServi
 
 
 async def test_repeated_path_in_one_payload_commits_once(service: MemoryService) -> None:
-    """Two records for one url collapse to one, in the response as well as the store.
-
-    The store always ended up with a single row, but the returned list used to
-    carry the superseded record too — so ``memu commit`` printed an inflated
-    count and filed it to telemetry.
-    """
+    """Repeated paths retain their first position and final value in the response and store."""
     committed = await service.commit_results(
         resource=[
             {"path": "/workspace/dup.md", "description": "first"},
+            {"path": "/workspace/other.md", "description": "other notes"},
             {"path": "/workspace/dup.md", "description": "second"},
         ]
     )
-    assert len(committed["resources"]) == 1
+    assert [r["url"] for r in committed["resources"]] == ["/workspace/dup.md", "/workspace/other.md"]
+    assert [r["caption"] for r in committed["resources"]] == ["second", "other notes"]
 
     found = await service.progressive_retrieve("second")
-    assert [r["url"] for r in found["resources"]] == ["/workspace/dup.md"]
-    assert [r["caption"] for r in found["resources"]] == ["second"]
+    by_url = {r["url"]: r for r in found["resources"]}
+    assert len(by_url) == 2
+    assert by_url["/workspace/dup.md"]["caption"] == "second"
+
+
+async def test_resource_recommit_cleans_only_exact_url_duplicates_in_scope(service: MemoryService) -> None:
+    """Legacy duplicates retain the first scoped row without merging similar URLs."""
+    repo = service.database.resource_repo
+    target_url = "/workspace/notes.md"
+    # Seed historical duplicates directly; public commits already deduplicate them.
+    for user_id, url, track in (
+        ("alice", target_url, "legacy"),
+        ("bob", target_url, "workspace"),
+        ("alice", target_url, "workspace"),
+        ("alice", "/workspace/notes.md.backup", "workspace"),
+        ("alice", "/workspace/Notes.md", "workspace"),
+    ):
+        repo.create_resource(
+            url=url,
+            local_path=url,
+            caption="original notes",
+            embedding=[0.0, 0.0, 1.0, 0.0],
+            user_data={"user_id": user_id},
+            track=track,
+        )
+
+    before = {resource_id: resource.model_dump() for resource_id, resource in repo.list_resources().items()}
+    duplicates = [
+        resource for resource in repo.list_resources({"user_id": "alice"}).values() if resource.url == target_url
+    ]
+    survivor_id = duplicates[0].id
+    stale_ids = {resource.id for resource in duplicates[1:]}
+
+    result = await service.commit_results(
+        resource=[{"path": f"  {target_url}  ", "description": "updated notes"}],
+        user={"user_id": "alice"},
+    )
+
+    assert len(result["resources"]) == 1
+    committed = result["resources"][0]
+    assert committed["id"] == survivor_id
+    assert committed["created_at"] == before[survivor_id]["created_at"]
+    assert committed["caption"] == "updated notes"
+    assert committed["track"] == "workspace"
+    after = {resource_id: resource.model_dump() for resource_id, resource in repo.list_resources().items()}
+    assert set(after) == set(before) - stale_ids
+    assert after[survivor_id]["caption"] == "updated notes"
+    for resource_id in set(after) - {survivor_id}:
+        assert after[resource_id] == before[resource_id]
 
 
 async def test_recommit_updates_the_resource_row_in_place(service: MemoryService) -> None:
