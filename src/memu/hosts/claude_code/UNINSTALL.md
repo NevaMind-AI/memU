@@ -18,18 +18,20 @@ diagnostic. File checks and deletion belong to the CLI. Open a fresh Claude
 session to load the settings change.
 
 Before removing the executable, use the CLI to clean up legacy schedules separately.
-On macOS, run these commands in order; stop if either exits nonzero:
+On macOS, the CLI checks schedule ownership and verifies removals. Run these
+commands in order; stop if either exits nonzero:
 
 ```sh
 memu-claude-code schedule status
 memu-claude-code schedule uninstall
 ```
 
-On Windows, run `memu-claude-code schedule uninstall`.
-The CLI owns schedule discovery, ownership checks, removal and read-back. On a
-nonzero exit, retain the executable, report the diagnostic and stop. Do not
-inspect or delete scheduler files manually; troubleshooting requires a separate
-request. On other platforms, report that schedule cleanup is not supported and
+On Windows, run `memu-claude-code schedule uninstall`. Treat any removal warning
+as incomplete cleanup, even if the command exits 0.
+On a nonzero exit or incomplete cleanup, retain the executable, report the
+diagnostic and stop. Do not inspect or delete scheduler files manually;
+troubleshooting requires a separate request. On other platforms, report that
+schedule cleanup is not supported and
 retain the executable if known registrations still need it.
 
 Legacy task names: current `{{task_name}}`; former {{former_task_names}};
