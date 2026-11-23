@@ -163,8 +163,6 @@ Adding another host means implementing one `TranscriptSource` (where its session
 
 Use `memu memorize` to turn application-owned conversations into memory and skills.
 
-For user-memory selection, evidence scope, and rewrite examples, see [Writing user memory](docs/memory-content.md) ([简体中文](docs/memory-content.zh.md)).
-
 ## CLI
 
 With memU Cloud, sign in at [memu.so](https://memu.so) to view your memory files. With a local installation, memory lives in the shared store configured by `MEMU_DB` in `~/.memu/config.env` — typically `~/.memu/memu.sqlite3` for local SQLite, or a Postgres DSN.
