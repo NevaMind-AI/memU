@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import plistlib
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -185,6 +186,7 @@ def test_cron_targeted_removal_preserves_bytes(isolated, monkeypatch):
     assert stored == [remaining]
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="requires Unix ownership and permissions")
 def test_system_cron_atomic_replacement_and_mode(isolated, monkeypatch, tmp_path):
     path = tmp_path / "system-cron"
     original = b"# system header\n" + b"0 * * * * root " + CRON.split(b" ", 5)[5] + b"@hourly daemon echo other\n"
@@ -196,6 +198,7 @@ def test_system_cron_atomic_replacement_and_mode(isolated, monkeypatch, tmp_path
     assert path.stat().st_mode & 0o777 == 0o640
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="requires Unix symlink support without elevated privileges")
 def test_symlink_and_inspection_failure_are_not_absent(isolated, monkeypatch, tmp_path):
     target = tmp_path / "outside.plist"
     target.write_bytes(plistlib.dumps({"Label": "keep", "ProgramArguments": ACTION}))
