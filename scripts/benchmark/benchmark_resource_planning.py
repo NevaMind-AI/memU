@@ -1,6 +1,6 @@
 """Compare resource planning and complete SQLite commits against a Git revision.
 
-Run from the checkout with ``uv run python benchmarks/benchmark_resource_planning.py``.
+Run from the checkout with ``uv run python scripts/benchmark/benchmark_resource_planning.py``.
 Use ``--baseline-ref <commit> --batch-sizes 1 10 50 1000`` for a different baseline
 or bulk workload. Standard memorize resource discovery defaults to a 50-resource cap.
 
@@ -46,7 +46,7 @@ class LocalEmbedding:
 
 
 def baseline_planner(revision: str) -> Planner:
-    repository = Path(__file__).resolve().parents[1]
+    repository = Path(__file__).resolve().parents[2]
     source = subprocess.check_output(  # noqa: S603
         ["git", "show", f"{revision}:src/memu/app/agentic.py"],  # noqa: S607
         cwd=repository,
