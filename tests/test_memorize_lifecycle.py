@@ -75,7 +75,7 @@ async def test_commit_empty_memory_cleanup(tmp_path: Path, fail: bool) -> None:
     await prepare_memorize(_input(), workspace, backend, verify_command="memu verify")
     workspace.memory.mkdir(exist_ok=True)
     path = workspace.memory / "empty.md"
-    path.write_text("---\nname: empty\n---\n \t\n", encoding="utf-8")
+    path.write_text("---\nname: empty\nempty: true\n---\n \t\n", encoding="utf-8")
     backend.fail_commit = fail
     if fail:
         with pytest.raises(RuntimeError, match="commit failed"):
