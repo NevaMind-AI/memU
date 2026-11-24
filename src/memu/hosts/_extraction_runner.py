@@ -1,7 +1,12 @@
-"""Own one extraction process without importing the memU package.
+"""Run one query-extraction CLI on Windows, Linux, and macOS using only stdlib.
 
 The caller supplies an ASCII JSON argv line followed by the extractor's raw
-stdin. POSIX callers also keep the write end of a dedicated lifetime pipe.
+stdin. On Linux/macOS, a lifetime pipe monitors the calling hook. This runner
+kills the extractor's process group when the hook or extractor exits;
+descendants that leave that group are outside this cleanup boundary.
+
+On Windows, the caller assigns this gated runner to a kill-on-close Job Object
+before sending the command. The Job owns the runner and its descendants.
 """
 
 from __future__ import annotations

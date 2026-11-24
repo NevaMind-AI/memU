@@ -288,7 +288,7 @@ def test_cmd_launcher_receives_binary_input(tmp_path: Path) -> None:
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows Job assignment gate")
 def test_job_assignment_failure_falls_back_without_starting_extractor(tmp_path: Path, monkeypatch) -> None:
-    from memu.hosts._extraction_job import WindowsExtractionJob
+    from memu.hosts._extraction_windows_job import WindowsExtractionJob
 
     marker = tmp_path / "unexpected.txt"
     attempts: list[int] = []
@@ -326,7 +326,7 @@ def test_job_assignment_failure_falls_back_without_starting_extractor(tmp_path: 
 def test_job_close_waits_for_all_members_before_closing_handle(process_count, wait_result) -> None:
     import ctypes
 
-    from memu.hosts._extraction_job import WindowsExtractionJob
+    from memu.hosts._extraction_windows_job import WindowsExtractionJob
 
     calls: list[str] = []
 
@@ -391,7 +391,7 @@ def test_job_close_waits_for_all_members_before_closing_handle(process_count, wa
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows Job shutdown failure")
 def test_job_close_error_still_closes_runner_pipes(tmp_path: Path, monkeypatch) -> None:
-    from memu.hosts._extraction_job import WindowsExtractionJob
+    from memu.hosts._extraction_windows_job import WindowsExtractionJob
 
     processes = []
     popen = subprocess.Popen

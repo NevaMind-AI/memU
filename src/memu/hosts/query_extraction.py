@@ -123,7 +123,7 @@ def _run_managed(
     with ExitStack() as resources:
         job, life_reader, life_writer = None, None, None
         if sys.platform == "win32":
-            from memu.hosts._extraction_job import WindowsExtractionJob
+            from memu.hosts._extraction_windows_job import WindowsExtractionJob
 
             job = WindowsExtractionJob()
             resources.callback(job.close)

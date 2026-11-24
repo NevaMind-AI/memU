@@ -1,4 +1,10 @@
-"""Windows ownership boundary for one gated query-extraction runner."""
+"""Windows Job Object ownership for a gated query-extraction runner.
+
+The calling hook assigns the runner before allowing it to launch the CLI.
+Explicit cleanup terminates Job members and waits up to two seconds for their
+exits. Hook process exit closes its sole Job handle, triggering termination
+without executing the explicit cleanup wait.
+"""
 
 from __future__ import annotations
 
@@ -58,7 +64,7 @@ def _last_error() -> OSError:
 
 
 class WindowsExtractionJob:
-    """Kill the assigned runner and its descendants when the hook closes or exits."""
+    """Own the extraction runner and its descendants in a Windows Job Object."""
 
     def __init__(self) -> None:
         self._handle: int | None = None
@@ -161,7 +167,7 @@ class WindowsExtractionJob:
             raise _last_error()
 
     def close(self) -> None:
-        """Wait for each member's exit before releasing the extraction working directory."""
+        """Terminate Job members and wait up to two seconds for their exits."""
         if self._handle is None:
             return
         try:
