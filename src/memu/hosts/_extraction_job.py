@@ -133,8 +133,9 @@ class WindowsExtractionJob:
             ):
                 count = wintypes.DWORD.from_buffer(buffer, 4).value
                 return list((ctypes.c_size_t * count).from_buffer(buffer, 8))
-            if ctypes.get_last_error() != 234:  # ERROR_MORE_DATA
-                raise _last_error()
+            error = _last_error()
+            if getattr(error, "winerror", None) != 234:  # ERROR_MORE_DATA
+                raise error
             capacity = max(capacity * 2, wintypes.DWORD.from_buffer(buffer).value)
 
     def _open_members(self, resources: ExitStack) -> list[int]:
@@ -143,9 +144,10 @@ class WindowsExtractionJob:
             # SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION
             handle = self._kernel32.OpenProcess(0x100000 | 0x1000, False, pid)
             if not handle:
-                if ctypes.get_last_error() == 87:  # ERROR_INVALID_PARAMETER: process already exited.
+                error = _last_error()
+                if getattr(error, "winerror", None) == 87:  # ERROR_INVALID_PARAMETER: process already exited.
                     continue
-                raise _last_error()
+                raise error
             resources.callback(self._close_handle, handle)
             member = wintypes.BOOL()
             if not self._kernel32.IsProcessInJob(handle, self._handle, ctypes.byref(member)):
