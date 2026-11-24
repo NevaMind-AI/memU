@@ -83,6 +83,11 @@ jobs:
         shell: bash
         run: uvx --isolated --from ./dist/memu_cli-*.whl memu --help
 
+      # The self-hosted runners have no preinstalled Node.js (the hosted image does).
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
       - name: Syntax check npm launcher
         run: node --check npm/bin/memu.js
 
