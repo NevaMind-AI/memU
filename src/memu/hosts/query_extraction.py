@@ -156,17 +156,19 @@ def _run_managed(
             request = json.dumps(argv).encode("ascii") + b"\n" + source
             status = _communicate(process, request, argv, deadline, timeout, cancel)
         finally:
-            if job is not None:
-                job.close()
-            if life_writer is not None:
-                life_writer.close()
-            if process.stdin is not None:
-                process.stdin.close()
             try:
-                process.wait(timeout=2)
+                if job is not None:
+                    job.close()
             finally:
-                if process.stderr is not None:
-                    process.stderr.close()
+                if life_writer is not None:
+                    life_writer.close()
+                if process.stdin is not None:
+                    process.stdin.close()
+                try:
+                    process.wait(timeout=2)
+                finally:
+                    if process.stderr is not None:
+                        process.stderr.close()
 
         if process.returncode or not status:
             msg = f"query extraction runner failed (exit {process.returncode})"

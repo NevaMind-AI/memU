@@ -7,10 +7,12 @@ import os
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from contextlib import suppress
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -316,3 +318,151 @@ def test_job_assignment_failure_falls_back_without_starting_extractor(tmp_path: 
     assert trace["extraction_status"] == "failed"
     assert len(attempts) == 1
     assert not marker.exists()
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows Job shutdown ordering")
+@pytest.mark.parametrize("process_count", [3, 20])
+@pytest.mark.parametrize("wait_result", [0, 258, 0xFFFFFFFF])
+def test_job_close_waits_for_all_members_before_closing_handle(process_count, wait_result) -> None:
+    import ctypes
+
+    from memu.hosts._extraction_job import WindowsExtractionJob
+
+    calls: list[str] = []
+
+    def freeze(*_args):
+        calls.append("freeze")
+        return True
+
+    def query(_handle, _kind, information, _size, _returned):
+        calls.append("snapshot")
+        (ctypes.c_uint32 * 2).from_buffer(information)[:] = [process_count, 0]
+        if _size < 8 + process_count * ctypes.sizeof(ctypes.c_size_t):
+            ctypes.set_last_error(234)
+            return False
+        (ctypes.c_uint32 * 2).from_buffer(information)[:] = [process_count, process_count]
+        (ctypes.c_size_t * process_count).from_buffer(information, 8)[:] = range(1, process_count + 1)
+        return True
+
+    def member(process, _job, result):
+        result._obj.value = process != process_count + 10  # Last PID was reused outside this Job.
+        return True
+
+    def terminate(*_args):
+        calls.append("terminate")
+        return True
+
+    def wait(handle, _timeout):
+        calls.append(f"wait:{handle}")
+        ctypes.set_last_error(5)
+        return wait_result
+
+    def close(handle):
+        calls.append(f"close:{handle}")
+        return True
+
+    job = WindowsExtractionJob.__new__(WindowsExtractionJob)
+    job._handle = 123
+    job._kernel32 = SimpleNamespace(  # type: ignore[assignment]
+        SetInformationJobObject=freeze,
+        QueryInformationJobObject=query,
+        OpenProcess=lambda _access, _inherit, pid: pid + 10,
+        IsProcessInJob=member,
+        TerminateJobObject=terminate,
+        WaitForSingleObject=wait,
+        CloseHandle=close,
+    )
+    if wait_result:
+        with pytest.raises(TimeoutError if wait_result == 258 else OSError):
+            job.close()
+    else:
+        job.close()
+    before_repeat = list(calls)
+    job.close()
+    assert calls == before_repeat
+    assert calls[:2] == ["freeze", "snapshot"]
+    assert calls.count("snapshot") == (2 if process_count > 16 else 1)
+    waited = [call for call in calls if call.startswith("wait:")]
+    assert waited == (["wait:11"] if wait_result else [f"wait:{pid + 10}" for pid in range(1, process_count)])
+    assert calls[-process_count - 1 :] == [f"close:{pid + 10}" for pid in range(process_count, 0, -1)] + ["close:123"]
+    assert calls.index("terminate") < calls.index("wait:11")
+    assert job._handle is None
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows Job shutdown failure")
+def test_job_close_error_still_closes_runner_pipes(tmp_path: Path, monkeypatch) -> None:
+    from memu.hosts._extraction_job import WindowsExtractionJob
+
+    processes = []
+    popen = subprocess.Popen
+    close = WindowsExtractionJob.close
+
+    def record_process(*args, **kwargs):
+        process = popen(*args, **kwargs)
+        processes.append(process)
+        return process
+
+    def fail_after_close(self):
+        was_open = self._handle is not None
+        close(self)
+        if was_open:
+            raise OSError("synthetic Job cleanup failure")  # noqa: TRY003
+
+    monkeypatch.setattr(query_extraction.subprocess, "Popen", record_process)
+    monkeypatch.setattr(WindowsExtractionJob, "close", fail_after_close)
+    with pytest.raises(OSError, match="synthetic Job cleanup failure"):
+        query_extraction.run_extraction(
+            [sys.executable, "-c", "print('done')"], b"", tmp_path, subprocess.CREATE_NO_WINDOW, env=_environment()
+        )
+    assert len(processes) == 1
+    assert processes[0].poll() is not None
+    assert processes[0].stdin is not None and processes[0].stdin.closed
+    assert processes[0].stderr is not None and processes[0].stderr.closed
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows cwd release after Job termination")
+@pytest.mark.parametrize("outcome", ["success", "nonzero", "timeout", "cancel"])
+def test_job_cleanup_releases_working_directory(tmp_path: Path, outcome: str) -> None:
+    marker = tmp_path / "tree.json"
+    cancellation = query_extraction.ExtractionCancellation()
+    canceller = None
+    if outcome == "cancel":
+
+        def cancel_when_started():
+            _wait_for_tree(marker)
+            cancellation.cancel()
+
+        canceller = threading.Thread(target=cancel_when_started, daemon=True)
+        canceller.start()
+    exit_code = {"success": "0", "nonzero": "3"}.get(outcome, "wait")
+    expected_error = {
+        "nonzero": subprocess.CalledProcessError,
+        "timeout": subprocess.TimeoutExpired,
+        "cancel": query_extraction.ExtractionCancelled,
+    }.get(outcome)
+    try:
+        with tempfile.TemporaryDirectory(dir=tmp_path) as directory:
+
+            def extract():
+                return query_extraction.run_extraction(
+                    [sys.executable, "-c", _EXTRACTOR, str(marker), exit_code],
+                    b"",
+                    Path(directory),
+                    subprocess.CREATE_NO_WINDOW,
+                    env=_environment(),
+                    timeout=2 if outcome == "timeout" else 12,
+                    cancel=cancellation,
+                )
+
+            if expected_error is None:
+                assert extract() == b"owned-output"
+            else:
+                with pytest.raises(expected_error):
+                    extract()
+        assert not Path(directory).exists()
+        _assert_tree_stopped(_wait_for_tree(marker))
+    finally:
+        cancellation.cancel()
+        _cleanup_tree(marker)
+        if canceller is not None:
+            canceller.join(timeout=12)
