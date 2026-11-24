@@ -7,6 +7,9 @@
 #
 # First-time setup: add a trusted publisher on PyPI for project `memu-cli`
 # (workflow: publish-memu-cli.yml, environment: pypi).
+#
+# Publishing to PyPI is a production target, so every job runs on the
+# `prod-access` runners.
 
 on:
   workflow_dispatch:
@@ -21,7 +24,7 @@ name: publish-memu-cli
 jobs:
   build:
     name: build distributions
-    runs-on: ubuntu-latest
+    runs-on: [prod-access]
     steps:
       - uses: actions/checkout@v6
 
@@ -29,8 +32,11 @@ jobs:
       # scopes the match to the [project] table near the top of the file.
       - name: Set memu-cli version
         shell: bash
+        env:
+          MEMU_CLI_VERSION: ${{ inputs.version }}
         run: |
-          perl -pi -e 's/^version = "[^"]*"/version = "${{ inputs.version }}"/ if $. < 10' pyproject.toml
+          [[ "$MEMU_CLI_VERSION" =~ ^[0-9A-Za-z.+!-]+$ ]] || { echo "::error::invalid version: $MEMU_CLI_VERSION"; exit 1; }
+          perl -pi -e 's/^version = "[^"]*"/version = "$ENV{MEMU_CLI_VERSION}"/ if $. < 10' pyproject.toml
           grep -q '^name = "memu-cli"' pyproject.toml || { echo "::error::pyproject is not memu-cli"; exit 1; }
           grep -E '^(name|version) = ' pyproject.toml | head -2
 
@@ -56,7 +62,7 @@ jobs:
 
   publish:
     name: publish memu-cli to PyPI
-    runs-on: ubuntu-latest
+    runs-on: [prod-access]
     needs:
       - build
     environment: pypi
