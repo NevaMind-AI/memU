@@ -1,3 +1,5 @@
+# Cuts releases from main and uploads the artifacts users download: a
+# production target, so every job runs on the `prod-access` runners.
 on:
   push:
     branches:
@@ -12,7 +14,7 @@ name: release-please
 
 jobs:
   release-please:
-    runs-on: ubuntu-latest
+    runs-on: [prod-access]
     outputs:
       releases_created: ${{ steps.release.outputs.releases_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
@@ -25,7 +27,7 @@ jobs:
 
   build:
     name: build distributions
-    runs-on: ubuntu-latest
+    runs-on: [prod-access]
     needs: release-please
     if: ${{ needs.release-please.outputs.releases_created == 'true' && needs.release-please.outputs.tag_name != '' }}
     steps:
@@ -52,7 +54,7 @@ jobs:
   # versioned independently of this release train).
   publish:
     name: publish release artifacts
-    runs-on: ubuntu-latest
+    runs-on: [prod-access]
     needs:
       - release-please
       - build
