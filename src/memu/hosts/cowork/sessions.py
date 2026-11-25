@@ -10,6 +10,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import ClassVar
 
+from memu.env import env_declared
 from memu.hosts.base import RecordKind, TranscriptReadError, TranscriptSource
 from memu.hosts.claude_records import classify_claude_record
 
@@ -78,8 +79,9 @@ def linux_data_roots() -> list[Path]:
 
 def platform_data_roots() -> list[Path]:
     """Return existing Cowork data roots for this platform, or an explicit override."""
-    if _ROOTS_ENV in os.environ:
-        return _override_roots(os.environ[_ROOTS_ENV])
+    roots = env_declared(_ROOTS_ENV, "\x00")
+    if roots != "\x00":
+        return _override_roots(roots)
     if sys.platform == "win32":
         return windows_data_roots()
     if sys.platform == "darwin":

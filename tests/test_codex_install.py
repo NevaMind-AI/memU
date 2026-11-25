@@ -319,7 +319,7 @@ def test_legacy_cleanup_preserves_customizations_before_registration(machine, cu
 
 @pytest.mark.parametrize("backend", ["cloud", "local"])
 def test_backend_uses_shared_config_writer_and_doctor(machine, monkeypatch, tmp_path, backend, capsys):
-    config_file.config_path().write_text("# user setting\nMEMU_CLAUDE_MODEL=existing-model\n")
+    config_file.config_path().write_text('# user setting\n[legacy]\nMEMU_CLAUDE_MODEL="existing-model"\n')
     observed = []
 
     async def doctor(spec, args):
@@ -355,7 +355,8 @@ def test_backend_uses_shared_config_writer_and_doctor(machine, monkeypatch, tmp_
 
 
 def test_interactive_install_configures_a_backend_when_only_client_metadata_exists(machine, monkeypatch, tmp_path):
-    config_file.config_path().write_text("MEMU_CLIENT_ID=existing-client\n")
+    config_file.config_path().unlink()
+    config_file.legacy_path().write_text("MEMU_CLIENT_ID=existing-client\n")
     inputs = iter(["local", str(tmp_path / "memory.sqlite3"), "openai", "fixture-model", "http://localhost:11434/v1"])
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
     monkeypatch.setattr(install.installation.getpass, "getpass", lambda _: "fixture-secret")

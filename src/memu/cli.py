@@ -23,7 +23,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import os
 import pathlib
 import re
 import shutil
@@ -50,7 +49,7 @@ MAX_MEMORIZE_SESSIONS = 10
 
 
 def _env(name: str, default: str) -> str:
-    # Falls through to ~/.memu/config.env before the default, so the CLI and the
+    # Falls through to ~/.memu/config.toml before the default, so the CLI and the
     # host adapters resolve the same store — see memu.env.
     return env(name, default) or default
 
@@ -390,7 +389,7 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         return 130
     except Exception as exc:
-        if os.environ.get("MEMU_DEBUG") == "1":
+        if env("MEMU_DEBUG") == "1":
             raise
         print(f"error: {exc} (set MEMU_DEBUG=1 for a traceback)", file=sys.stderr)
         return 1

@@ -14,7 +14,7 @@ Working state is per host. Codex predates this module and keeps its original
 so two hosts' bridging runs never race over one ``jobs/`` directory (the open
 issue ADR 0009 required settling before a second host shipped — see ADR 0010).
 The durable backend is shared regardless: every host reads
-``~/.memu/config.env``, which is the point — what one host's sessions taught
+``~/.memu/config.toml``, which is the point — what one host's sessions taught
 memU, another host retrieves.
 """
 
@@ -638,13 +638,14 @@ async def _cmd_backend_doctor(spec: HostSpec, args: argparse.Namespace) -> int:
     Deliberately exercises the same call the inject hook will, so a green doctor
     means the hook's retrieval works, not merely that some local store opened.
     """
-    from memu.env import CONFIG_ENV, cloud_base_url, embedding_provider, env, memory_mode
+    from memu import config_file
+    from memu.env import cloud_base_url, embedding_provider, env, memory_mode
 
     try:
         mode = memory_mode()
         result = await retrieval.retrieve("smoke test")
     except Exception as exc:
-        if os.environ.get("MEMU_DEBUG") == "1":
+        if env("MEMU_DEBUG") == "1":
             raise
         print(f"error: {exc} (set MEMU_DEBUG=1 for a traceback)", file=sys.stderr)
         if _smells_like_transport(exc):
@@ -657,7 +658,7 @@ async def _cmd_backend_doctor(spec: HostSpec, args: argparse.Namespace) -> int:
                 print(hint, file=sys.stderr)
         return 1
     found = events.counts(result, layers=("hits", "resources"))
-    print(f"config    {os.path.expanduser(CONFIG_ENV)}")
+    print(f"config    {config_file.active_path()}")
     print(f"mode      {mode}")
     if mode == "cloud":
         print(f"endpoint  {cloud_base_url()}")
@@ -925,7 +926,7 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
     # the instruction lands in and the binary it names are ours to fill in.
     retrieval.register(sub, host=spec.host, session_id_env=spec.session_id_env)
     _register_report(sub, bind(_cmd_report))
-    # `config.env` is host-irrelevant, so `memu` is the algorithmically correct
+    # `config.toml` is host-irrelevant, so `memu` is the algorithmically correct
     # home for these (ADR 0009) — and the wrong one for the install flow, whose
     # ergonomic bet is that `SKILL.md` hands the agent exactly one binary name and
     # every later step is `<that binary> …`. A second binary mid-flow adds a
@@ -1058,7 +1059,9 @@ def run(spec: HostSpec, argv: list[str] | None = None) -> int:
                 events.flush()
             except KeyboardInterrupt:
                 return 130
-        if os.environ.get("MEMU_DEBUG") == "1":
+        from memu.env import env
+
+        if env("MEMU_DEBUG") == "1":
             raise
         print(f"error: {exc} (set MEMU_DEBUG=1 for a traceback)", file=sys.stderr)
         return 1
