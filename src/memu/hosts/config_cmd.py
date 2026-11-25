@@ -142,6 +142,8 @@ def _write(updates: dict[str, str]) -> None:
     own rows: what the agent needs first is what this machine's backend now is, and
     where the file lives only matters once it is asking a different question.
     """
+    if "MEMU_QUERY_EXTRACT_ENABLED" not in config_file.read():
+        updates.setdefault("MEMU_QUERY_EXTRACT_ENABLED", "false")
     path, _ = config_file.write_values(updates, comments=_RETRIEVAL_CONFIG_COMMENTS)
     env_module.reload()
     _row("config", f"{path} ({config_file.permission_note()})")
