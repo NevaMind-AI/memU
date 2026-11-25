@@ -14,6 +14,11 @@ from memu.hosts.pi import prompt_hook
 from memu.hosts.pi import query_extraction as pi
 
 
+@pytest.fixture(autouse=True)
+def enable_extraction(monkeypatch):
+    monkeypatch.setenv("MEMU_QUERY_EXTRACT_ENABLED", "true")
+
+
 @pytest.mark.parametrize("result", [{"query": "topic"}, {"query": ""}, {"query": "x" * 201}, "not JSON"])
 def test_pi_request_and_validation(result, monkeypatch):
     monkeypatch.setattr(pi.shutil, "which", lambda _: "pi.cmd")
@@ -32,7 +37,7 @@ def test_pi_request_and_validation(result, monkeypatch):
                 "--offline",
             )
         )
-        assert source.decode("utf-8") == query_extraction.extraction_instruction("x" * 600)
+        assert source.decode("utf-8") == query_extraction.extraction_instruction("x" * 900)
         assert argv[argv.index("--provider") + 1] == "provider"
         assert argv[argv.index("--model") + 1] == "model"
         assert cwd.is_dir()
@@ -42,8 +47,8 @@ def test_pi_request_and_validation(result, monkeypatch):
 
     monkeypatch.setattr(query_extraction, "run_extraction", run)
     trace: dict[str, Any] = {}
-    selected = pi.select_query("x" * 600, trace, provider="provider", model="model")
-    assert selected == (result["query"] if isinstance(result, dict) and result.get("query") else "x" * 600)
+    selected = pi.select_query("x" * 900, trace, provider="provider", model="model")
+    assert selected == (result["query"] if isinstance(result, dict) and result.get("query") else "x" * 800)
 
 
 @pytest.mark.asyncio
@@ -60,7 +65,7 @@ async def test_hook_routes_extracted_query(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(pi, "_extract", extract)
     monkeypatch.setattr(prompt_hook, "retrieve", retrieve)
     monkeypatch.setattr(
-        "sys.stdin", io.StringIO(json.dumps({"prompt": "x" * 600, "provider": "provider", "model": "model"}))
+        "sys.stdin", io.StringIO(json.dumps({"prompt": "x" * 900, "provider": "provider", "model": "model"}))
     )
     assert await prompt_hook.prompt_hook(argparse.Namespace(base_dir=str(tmp_path))) == 0
     capsys.readouterr()
@@ -88,7 +93,7 @@ async def test_hook_cancellation_reaches_extraction_without_retrieval(tmp_path, 
 
     monkeypatch.setattr(pi, "_extract", extract)
     monkeypatch.setattr(prompt_hook, "retrieve", retrieve)
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"prompt": "x" * 600})))
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"prompt": "x" * 900})))
     task = asyncio.create_task(prompt_hook.prompt_hook(argparse.Namespace(base_dir=str(tmp_path))))
     try:
         await asyncio.wait_for(started.wait(), timeout=2)

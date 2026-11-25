@@ -14,12 +14,12 @@ from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
 
-from memu.env import LONG_QUERY_CHARS
+from memu.env import env
 
-EXTRACT_THRESHOLD = LONG_QUERY_CHARS
+EXTRACT_THRESHOLD = 800
 EXTRACT_INPUT_LIMIT = 32000
 EXTRACT_TIMEOUT = 12
-QUERY_MAX_CHARS = 2000
+QUERY_MAX_CHARS = 800
 _RUNNER = Path(__file__).with_name("_extraction_runner.py").resolve()
 
 
@@ -43,7 +43,10 @@ def select_query(prompt: str, trace: dict[str, Any], extract: Callable[[str], st
     """Use the original short prompt, or extract a query with a bounded fallback."""
     fallback = prompt[:QUERY_MAX_CHARS]
     trace["query_source"] = "original" if len(prompt) <= QUERY_MAX_CHARS else "prefix"
-    if sum(not char.isspace() for char in prompt) < EXTRACT_THRESHOLD:
+    if (env("MEMU_QUERY_EXTRACT_ENABLED") or "false").strip().lower() not in {"1", "true", "yes", "on"}:
+        trace["extraction_status"] = "disabled"
+        return fallback
+    if len(prompt) <= EXTRACT_THRESHOLD:
         trace["extraction_status"] = "not_needed"
         return fallback
     if len(prompt) > EXTRACT_INPUT_LIMIT:

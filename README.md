@@ -212,6 +212,15 @@ For Local / self-hosted installations, every CLI flag has a matching variable:
 | Embedding model | `MEMU_EMBED_MODEL` | the provider's default |
 | Embedding batch size | `MEMU_EMBED_BATCH_SIZE` | provider default (64); lower it for providers that cap inputs per request, e.g. `10` for DashScope |
 | Base URL | `MEMU_BASE_URL` | the provider's default |
+| Host query extraction | `MEMU_QUERY_EXTRACT_ENABLED` | `false`; set `true` to extract search queries from inputs longer than 800 characters in the Codex, Claude Code, and pi prompt hooks |
+
+Host prompt hooks use the first 800 characters of the submitted text as the search query by default,
+without an extra model call. Set `MEMU_QUERY_EXTRACT_ENABLED=true` in the process environment or
+`~/.memu/config.env` to enable query extraction globally across these hosts. Inputs of at most 800
+characters still go directly to retrieval. Extraction failures, the 12-second extraction timeout,
+and inputs over the 32,000-character extraction limit fall back to the first 800 characters.
+Extraction adds a host-model call before retrieval; enable it when long inputs need semantic query
+selection. This setting controls query selection, not retrieval frequency or context delivery timing.
 
 Run `<binary> doctor` to display the resolved mode and verify the same retrieval
 path the host uses.

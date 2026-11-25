@@ -192,7 +192,8 @@ def test_owner_exit_cleans_tree_without_killing_unrelated_process(tmp_path: Path
         unrelated.wait(timeout=5)
 
 
-def test_explicit_cancellation_is_idempotent_and_does_not_fall_back(tmp_path: Path) -> None:
+def test_explicit_cancellation_is_idempotent_and_does_not_fall_back(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("MEMU_QUERY_EXTRACT_ENABLED", "true")
     marker = tmp_path / "tree.json"
     cancellation = query_extraction.ExtractionCancellation()
     errors: list[BaseException] = []
@@ -200,7 +201,7 @@ def test_explicit_cancellation_is_idempotent_and_does_not_fall_back(tmp_path: Pa
     def extract() -> None:
         try:
             query_extraction.select_query(
-                "x" * 600,
+                "x" * 900,
                 {},
                 lambda _: query_extraction.run_extraction(
                     [sys.executable, "-c", _EXTRACTOR, str(marker), "wait"],
@@ -301,6 +302,7 @@ def test_job_assignment_failure_falls_back_without_starting_extractor(tmp_path: 
             raise PermissionError(msg)
         assign(self, process)
 
+    monkeypatch.setenv("MEMU_QUERY_EXTRACT_ENABLED", "true")
     monkeypatch.setattr(WindowsExtractionJob, "assign", fail_once)
     trace: dict[str, Any] = {}
     query = query_extraction.select_query(
@@ -314,7 +316,7 @@ def test_job_assignment_failure_falls_back_without_starting_extractor(tmp_path: 
             env=_environment(),
         ).decode(),
     )
-    assert query == "x" * 2000
+    assert query == "x" * 800
     assert trace["extraction_status"] == "failed"
     assert len(attempts) == 1
     assert not marker.exists()

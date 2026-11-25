@@ -15,6 +15,11 @@ from memu.hosts.codex import query_extraction as codex
 from memu.hosts.pi import query_extraction as pi
 
 
+@pytest.fixture(autouse=True)
+def enable_extraction(monkeypatch):
+    monkeypatch.setenv("MEMU_QUERY_EXTRACT_ENABLED", "true")
+
+
 @pytest.mark.parametrize("adapter", [codex, claude, pi])
 @pytest.mark.parametrize("outcome", ["short", "success", "timeout", "failure", "input_limit"])
 def test_shared_selection(adapter, outcome, monkeypatch):
@@ -31,7 +36,7 @@ def test_shared_selection(adapter, outcome, monkeypatch):
 
     monkeypatch.setattr(adapter, "_extract", extract)
     trace: dict[str, Any] = {}
-    assert adapter.select_query(prompt, trace) == ("extracted topic" if outcome == "success" else prompt[:2000])
+    assert adapter.select_query(prompt, trace) == ("extracted topic" if outcome == "success" else prompt[:800])
     assert bool(calls) == (outcome not in ("short", "input_limit"))
     assert trace["extraction_status"] == {"short": "not_needed", "success": "succeeded", "failure": "failed"}.get(
         outcome, outcome
@@ -59,23 +64,23 @@ def test_claude_request_and_validation(value, monkeypatch):
         assert json.loads(argv[argv.index("--settings") + 1]) == {"disableAllHooks": True}
         assert json.loads(argv[argv.index("--mcp-config") + 1]) == {"mcpServers": {}}
         assert "--strict-mcp-config" in argv and "--no-session-persistence" in argv
-        assert source.decode() == query_extraction.extraction_instruction("x" * 600)
+        assert source.decode() == query_extraction.extraction_instruction("x" * 900)
         assert cwd.is_dir()
         assert kwargs["env"] == {"USER_PROVIDER": "preserved", "MEMU_BRIDGING_RUN": "1", "MEMU_CLAUDE_MEMORIZE": "1"}
         return json.dumps(value).encode()
 
     monkeypatch.setattr(query_extraction, "run_extraction", run)
     trace: dict[str, Any] = {}
-    expected = "x" * 600
+    expected = "x" * 800
     if value in ({"result": '{"query":"topic"}'}, {"result": '{"query":"' + "x" * 201 + '"}'}):
         expected = json.loads(value["result"])["query"]
-    assert claude.select_query("x" * 600, trace) == expected
+    assert claude.select_query("x" * 900, trace) == expected
 
 
 def test_claude_hook_uses_extracted_query_and_remaining_deadline(monkeypatch):
     monkeypatch.delenv("MEMU_CLAUDE_MEMORIZE", raising=False)
     monkeypatch.setattr(
-        sys, "stdin", io.StringIO(json.dumps({"hook_event_name": "UserPromptSubmit", "prompt": "x" * 600}))
+        sys, "stdin", io.StringIO(json.dumps({"hook_event_name": "UserPromptSubmit", "prompt": "x" * 900}))
     )
     monkeypatch.setattr(claude, "_extract", lambda prompt: "topic")
     ticks = iter([0, 12])
