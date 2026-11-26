@@ -62,7 +62,7 @@ class WorkBuddyTranscriptSource(TranscriptSource):
         if typ == "message" and entry.get("role") in _MESSAGE_ROLES:
             content = entry.get("content")
             if isinstance(content, list):
-                block_types = {b.get("type") for b in content if isinstance(b, dict)}
+                block_types = {b["type"] for b in content if isinstance(b, dict) and isinstance(b.get("type"), str)}
                 if block_types & {"input_text", "output_text"}:
                     return RecordKind.MESSAGE
             if isinstance(content, str) and content:

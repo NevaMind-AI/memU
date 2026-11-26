@@ -91,9 +91,9 @@ class PiTranscriptSource(TranscriptSource):
         if not isinstance(message, dict):
             return RecordKind.OTHER
         role = message.get("role")
-        if role in {"toolResult", "bashExecution"}:
+        if role in ("toolResult", "bashExecution"):
             return RecordKind.TOOL
-        if role not in {"user", "assistant"}:
+        if role not in ("user", "assistant"):
             return RecordKind.OTHER
 
         content = message.get("content")
@@ -101,7 +101,9 @@ class PiTranscriptSource(TranscriptSource):
             return RecordKind.MESSAGE
         if not isinstance(content, list):
             return RecordKind.OTHER
-        block_types = {block.get("type") for block in content if isinstance(block, dict)}
+        block_types = {
+            block["type"] for block in content if isinstance(block, dict) and isinstance(block.get("type"), str)
+        }
         if "text" in block_types:
             return RecordKind.MESSAGE
         if "toolCall" in block_types:
