@@ -28,8 +28,9 @@ def config(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) -> pathlib.P
     """An isolated ``config.env`` path (not yet created). Returns it."""
     from memu import env as env_module
 
-    path = tmp_path / "memu" / "config.env"
-    monkeypatch.setenv("MEMU_CONFIG_ENV", str(path))
+    path = tmp_path / "memu" / "config.toml"
+    monkeypatch.setenv("MEMU_CONFIG_ENV", str(path.with_suffix(".env")))
+    monkeypatch.delenv("MEMU_CONFIG", raising=False)
     # The dotenv loader is process-cached, and these commands write through it.
     env_module.reload()
     for key in ("MEMU_MEMORY_MODE", "MEMU_DB", "MEMU_CLOUD_API_KEY", "MEMU_CLIENT_ID"):
@@ -39,7 +40,7 @@ def config(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) -> pathlib.P
 
 def _write(path: pathlib.Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+    path.with_suffix(".env").write_text(text, encoding="utf-8")
 
 
 # --------------------------------------------------------------------------- #
@@ -57,14 +58,10 @@ def test_merge_preserves_every_other_logical_line(config: pathlib.Path) -> None:
 
     config_file.write_values({"MEMU_MEMORY_MODE": "local"})
 
-    assert config.read_text(encoding="utf-8") == (
-        "# written by hand in 2024\n"
-        "MEMU_DB=/srv/memu.sqlite3\n"
-        "\n"
-        "MEMU_EMBED_PROVIDER=jina\n"
-        "NO_PROXY=localhost\n"
-        "MEMU_MEMORY_MODE=local\n"
-    )
+    assert config_file.read()["MEMU_EMBED_PROVIDER"] == "jina"
+    assert config_file.read()["NO_PROXY"] == "localhost"
+    assert config_file.read()["MEMU_MEMORY_MODE"] == "local"
+    assert config.with_suffix(".env").read_text(encoding="utf-8").startswith("# written by hand in 2024")
 
 
 def test_existing_key_is_rewritten_in_place(config: pathlib.Path) -> None:
@@ -74,9 +71,9 @@ def test_existing_key_is_rewritten_in_place(config: pathlib.Path) -> None:
 
     config_file.write_values({"MEMU_DB": "/new"})
 
-    assert config.read_text(encoding="utf-8") == (
-        "# the store\nMEMU_DB=/new\n# the endpoint\nMEMU_BASE_URL=http://localhost:11434/v1\n"
-    )
+    assert config_file.read()["MEMU_DB"] == "/new"
+    assert config_file.read()["MEMU_BASE_URL"] == "http://localhost:11434/v1"
+    assert config.read_text(encoding="utf-8").count('db = "/new"') == 1
 
 
 def test_duplicate_assignments_all_collapse_to_the_new_value(config: pathlib.Path) -> None:
@@ -87,7 +84,8 @@ def test_duplicate_assignments_all_collapse_to_the_new_value(config: pathlib.Pat
 
     config_file.write_values({"MEMU_CLIENT_ID": "three"})
 
-    assert config.read_text(encoding="utf-8") == "MEMU_CLIENT_ID=three\nMEMU_DB=/srv/db\nMEMU_CLIENT_ID=three\n"
+    assert 'client_id = "three"' in config_file.state_path().read_text(encoding="utf-8")
+    assert "client_id" not in config.read_text(encoding="utf-8")
     assert config_file.read()["MEMU_CLIENT_ID"] == "three"
 
 
@@ -102,6 +100,7 @@ def test_file_is_owner_only(config: pathlib.Path) -> None:
 @pytest.mark.skipif(os.name != "posix", reason="POSIX mode bits only")
 def test_nothing_to_set_still_restricts_an_existing_file(config: pathlib.Path) -> None:
     _write(config, "MEMU_DB=/srv/db\n")
+    config_file.read()
     config.chmod(0o644)
 
     _, changed = config_file.write_values({})
@@ -129,7 +128,7 @@ def test_read_is_blind_to_the_process_environment(config: pathlib.Path, monkeypa
     _write(config, "MEMU_DB=/srv/db\n")
     monkeypatch.setenv("MEMU_CLOUD_API_KEY", "sk-from-the-shell")
 
-    assert "MEMU_CLOUD_API_KEY" not in config_file.read()
+    assert not config_file.read().get("MEMU_CLOUD_API_KEY")
 
 
 @pytest.mark.parametrize("encoding", ["utf-8-sig", "utf-16-le", "utf-16-be"])
@@ -141,7 +140,7 @@ def test_init_migrates_a_bom_encoded_config_to_utf8(config: pathlib.Path, encodi
         "utf-16-be": codecs.BOM_UTF16_BE + text.encode("utf-16-be"),
     }
     config.parent.mkdir(parents=True, exist_ok=True)
-    config.write_bytes(codecs_by_encoding[encoding])
+    config.with_suffix(".env").write_bytes(codecs_by_encoding[encoding])
     env_module.reload()
 
     assert env_module.env("MEMU_DB") == "C:/用户/memu.sqlite3"
@@ -149,7 +148,7 @@ def test_init_migrates_a_bom_encoded_config_to_utf8(config: pathlib.Path, encodi
 
     migrated = config.read_bytes()
     assert not migrated.startswith((codecs.BOM_UTF8, codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE))
-    assert migrated.decode("utf-8").splitlines()[:2] == text.splitlines()
+    assert config.with_suffix(".env").read_bytes() == codecs_by_encoding[encoding]
     assert config_file.read()["MEMU_DB"] == "C:/用户/memu.sqlite3"
 
 
@@ -157,25 +156,26 @@ def test_init_migrates_a_bom_encoded_config_to_utf8(config: pathlib.Path, encodi
 def test_init_migrates_a_windows_ansi_config_to_utf8(config: pathlib.Path) -> None:
     text = "# 用户配置\nMEMU_DB=C:/用户/memu.sqlite3\n"
     config.parent.mkdir(parents=True, exist_ok=True)
-    config.write_bytes(text.encode(locale.getencoding()))
+    config.with_suffix(".env").write_bytes(text.encode(locale.getencoding()))
     env_module.reload()
 
     assert env_module.env("MEMU_DB") == "C:/用户/memu.sqlite3"
     assert run(SPEC, ["init"]) == 0
 
-    assert config.read_bytes().decode("utf-8").splitlines()[:2] == text.splitlines()
+    assert config.with_suffix(".env").read_bytes() == text.encode(locale.getencoding())
     assert config_file.read()["MEMU_DB"] == "C:/用户/memu.sqlite3"
 
 
 def test_no_logical_update_still_migrates_legacy_encoding(config: pathlib.Path) -> None:
     text = "MEMU_MEMORY_MODE=local\nMEMU_CLIENT_ID=existing\n"
     config.parent.mkdir(parents=True, exist_ok=True)
-    config.write_bytes(codecs.BOM_UTF16_LE + text.encode("utf-16-le"))
+    config.with_suffix(".env").write_bytes(codecs.BOM_UTF16_LE + text.encode("utf-16-le"))
 
     path, changed = config_file.write_values({})
 
     assert (path, changed) == (config, True)
-    assert config.read_bytes().decode("utf-8").splitlines() == text.splitlines()
+    assert config_file.read()["MEMU_MEMORY_MODE"] == "local"
+    assert config_file.read()["MEMU_CLIENT_ID"] == "existing"
 
 
 # --------------------------------------------------------------------------- #
@@ -187,12 +187,13 @@ def test_no_logical_update_still_migrates_legacy_encoding(config: pathlib.Path) 
 def test_config_commands_add_editable_retrieval_comments_once(config: pathlib.Path, arguments: list[str]) -> None:
     assert run(SPEC, arguments) == 0
     text = config.read_text(encoding="utf-8")
-    assert "# MEMU_CLOUD_RETRIEVE_MIN_SCORE_SHORT=0.55" in text
-    assert "# MEMU_LOCAL_RETRIEVE_MIN_SCORE_SHORT=<your-calibrated-score>" in text
+    assert "[retrieval.cloud.min_score]" in text
+    assert "[retrieval.local.min_score]" in text
+    assert "# short = 0.55" in text
     assert not any("RETRIEVE_MIN_SCORE" in key for key in config_file.read())
-    # An edited template and explicit overrides survive repeated initialization.
-    edited = text.replace("# MEMU_CLOUD_RETRIEVE_MIN_SCORE_SHORT=0.55", "# my calibration note")
-    edited += "MEMU_CLOUD_RETRIEVE_MIN_SCORE_SHORT=0.67\nMEMU_LOCAL_RETRIEVE_MIN_SCORE_LONG=0.71\n"
+    # User comments and explicit overrides survive repeated initialization.
+    edited = text.replace("# short = 0.55", "short = 0.67", 1)
+    edited = edited.replace("# Local defaults", "# my calibration note\n# Local defaults")
     config.write_text(edited, encoding="utf-8")
     assert run(SPEC, arguments) == 0
     assert config.read_text(encoding="utf-8") == edited
@@ -205,10 +206,10 @@ def test_config_commands_seed_editable_query_extraction_setting(config: pathlib.
     if existing is not None:
         _write(config, f"# User settings\nMEMU_QUERY_EXTRACT_ENABLED={existing}\n")
     assert run(SPEC, arguments) == 0
-    assert config_file.read()["MEMU_QUERY_EXTRACT_ENABLED"] == (existing or "false")
+    assert config_file.read()["MEMU_QUERY_EXTRACT_ENABLED"] == ("1" if existing == "true" else "0")
     text = config.read_text(encoding="utf-8")
-    assert text.count("MEMU_QUERY_EXTRACT_ENABLED=") == 1
-    edited = text.replace("MEMU_QUERY_EXTRACT_ENABLED=false", "MEMU_QUERY_EXTRACT_ENABLED=true")
+    assert text.count("extract_query =") == 1
+    edited = text.replace("extract_query = false", "extract_query = true")
     config.write_text(edited, encoding="utf-8")
     assert run(SPEC, arguments) == 0
     assert config.read_text(encoding="utf-8") == edited
@@ -417,7 +418,7 @@ def test_config_local_without_a_store_is_allowed(config: pathlib.Path) -> None:
     assert run(SPEC, ["config", "--local"]) == 0
 
     assert config_file.read()["MEMU_MEMORY_MODE"] == "local"
-    assert "MEMU_DB" not in config_file.read()
+    assert not config_file.read().get("MEMU_DB")
 
 
 def test_config_does_not_persist_the_default_endpoint(config: pathlib.Path) -> None:
@@ -444,7 +445,7 @@ def test_embed_api_key_writes_the_embedding_variable(config: pathlib.Path) -> No
 
     values = config_file.read()
     assert values["MEMU_API_KEY"] == "sk-embed"
-    assert "MEMU_CLOUD_API_KEY" not in values
+    assert not values.get("MEMU_CLOUD_API_KEY")
 
 
 def test_config_only_writes_the_flags_it_was_given(config: pathlib.Path) -> None:
@@ -499,4 +500,5 @@ def test_show_names_the_backward_compatible_mode(config: pathlib.Path, capsys: p
 
     run(SPEC, ["config", "show"])
 
-    assert "undeclared" in capsys.readouterr().out
+    assert "local" in capsys.readouterr().out
+    assert config_file.read()["MEMU_MEMORY_MODE"] == "local"

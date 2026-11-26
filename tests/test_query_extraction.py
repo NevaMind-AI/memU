@@ -16,17 +16,33 @@ def test_extraction_disabled_by_default(adapter, length, monkeypatch):
     monkeypatch.setattr(env, "_file_values", lambda: {})
     monkeypatch.setattr(adapter, "_extract", lambda *a, **kw: pytest.fail("Extraction must not run"))
     prompt = "中" * length
-    trace = {}
+    trace: dict[str, object] = {}
     assert adapter.select_query(prompt, trace) == prompt[:800]
     assert trace["extraction_status"] == "disabled"
     assert trace["query_source"] == ("prefix" if length > 800 else "original")
 
 
-@pytest.mark.parametrize("setting,expected", [("true", "topic"), ("false", "x" * 800)])
-def test_extraction_uses_shared_config_file(setting, expected, monkeypatch):
+@pytest.mark.parametrize("adapter", [codex, claude, pi])
+@pytest.mark.parametrize("enabled", [True, False])
+@pytest.mark.parametrize("legacy", [True, False])
+def test_extraction_uses_shared_config_file(adapter, enabled, legacy, monkeypatch, tmp_path):
     monkeypatch.delenv("MEMU_QUERY_EXTRACT_ENABLED", raising=False)
-    monkeypatch.setattr(env, "_file_values", lambda: {"MEMU_QUERY_EXTRACT_ENABLED": setting})
-    assert select_query("x" * 801, {}, lambda _: "topic") == expected
+    monkeypatch.delenv("MEMU_CONFIG", raising=False)
+    source = tmp_path / "config.env"
+    monkeypatch.setenv("MEMU_CONFIG_ENV", str(source))
+    setting = str(enabled).lower()
+    if legacy:
+        source.write_text(f"MEMU_QUERY_EXTRACT_ENABLED={setting}\n", encoding="utf-8")
+    else:
+        source.with_suffix(".toml").write_text(f"[retrieval]\nextract_query = {setting}\n", encoding="utf-8")
+    env.reload()
+    monkeypatch.setattr(adapter, "_extract", lambda *a, **kw: "topic")
+    try:
+        assert adapter.select_query("x" * 801, {}) == ("topic" if enabled else "x" * 800)
+        monkeypatch.setenv("MEMU_QUERY_EXTRACT_ENABLED", str(not enabled).lower())
+        assert adapter.select_query("x" * 801, {}) == ("x" * 800 if enabled else "topic")
+    finally:
+        env.reload()
 
 
 def test_environment_overrides_config_file(monkeypatch):

@@ -1,0 +1,56 @@
+# Shared by memu and every host adapter. Environment variables override this file.
+mode = "local"
+debug = false
+
+[cloud]
+api_key = ""
+# base_url = "https://api.memu.so/api/v4/memory/"
+
+[local]
+# Keep the existing store path when upgrading; do not move or recreate its data.
+db = ""
+
+[embedding]
+# Empty values follow provider defaults / provider-specific environment variables.
+provider = ""
+model = ""
+api_key = ""
+base_url = ""
+# batch_size = 64
+
+[retrieval]
+# Extract queries only for inputs longer than 800 characters; adds a host-model call.
+# Disabled or failed extraction uses the first 800 characters directly.
+extract_query = false
+
+[retrieval.cloud.min_score]
+# Calibrated Cloud defaults; uncomment to override.
+# short = 0.55
+# long = 0.60
+# extracted = 0.58
+
+[retrieval.local.min_score]
+# Local defaults to no score filter. Calibrate before setting a cutoff [-1, 1].
+# short = 0.55
+# long = 0.60
+# extracted = 0.58
+
+[network]
+# proxy = "http://localhost:7890"
+# no_proxy = "localhost,127.0.0.1"
+# no_proxy_lowercase = "localhost,127.0.0.1"
+
+[telemetry]
+enabled = true
+# An empty base_url disables event delivery.
+# base_url = "https://api.memu.so/api/memu/analytics/events"
+# spool = "~/.memu/events.jsonl"
+debug = false
+
+[hosts.cowork]
+# roots = ["/path/to/session/directory"]
+
+[sources]
+# Empty URLs disable remote refresh.
+# docs = "https://memu.pro/sdk/docs"
+# templates = "https://memu.pro/sdk/instructions"

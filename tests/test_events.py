@@ -175,10 +175,8 @@ def test_client_instance_id_persists_in_config_and_survives_a_reinstall(
     events.record(events.CLI_INSTALL_SUCCEEDED, host="codex")
     first = _spooled(reporting)[0]["client_instance_id"]
 
-    # `UNINSTALL.md` Part 3 keeps config.env unconditionally, which is the whole
-    # reason the id lives there: install -> uninstall -> reinstall stays one
-    # instance's history.
-    assert f"MEMU_CLIENT_ID={first}" in (tmp_path / "config.env").read_text(encoding="utf-8")
+    # Client identity remains stable across reinstall, outside editable settings.
+    assert f'client_id = "{first}"' in (tmp_path / "config.state.toml").read_text(encoding="utf-8")
 
     env_module.reload()
     reporting.unlink()
