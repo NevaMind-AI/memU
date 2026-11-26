@@ -83,8 +83,12 @@ def _flatten(document: Mapping[str, Any]) -> dict[str, str]:
     result: dict[str, str] = {}
     for key, dotted in KEYS.items():
         value: Any = document
-        for part in dotted.split("."):
-            if not isinstance(value, Mapping) or part not in value:
+        parts = dotted.split(".")
+        for index, part in enumerate(parts):
+            if not isinstance(value, Mapping):
+                path = ".".join(parts[:index])
+                raise ValueError(f"{path} must be a table")  # noqa: TRY003, TRY004
+            if part not in value:
                 break
             value = value[part]
         else:

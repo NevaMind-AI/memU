@@ -104,6 +104,32 @@ def test_invalid_new_file_is_not_silently_replaced_by_legacy(legacy):
     assert target.read_text() == "[local]\ndb = 123\n"
 
 
+@pytest.mark.parametrize(
+    "invalid_group,path",
+    [
+        ('embedding = "jina"', "embedding"),
+        ('embedding = ["jina"]', "embedding"),
+        ('[[embedding]]\nprovider = "jina"', "embedding"),
+        ("[retrieval]\ncloud = false", "retrieval.cloud"),
+        ("[retrieval.cloud]\nmin_score = []", "retrieval.cloud.min_score"),
+    ],
+)
+def test_known_groups_require_tables(legacy, monkeypatch, invalid_group, path):
+    for key in ("MEMU_EMBED_PROVIDER", "MEMU_LLM_PROVIDER"):
+        monkeypatch.delenv(key, raising=False)
+    legacy.write_text("MEMU_EMBED_PROVIDER=voyage\n")
+    target = config_file.config_path()
+    original = invalid_group + '\n[local]\ndb = "/existing/store.sqlite3"\n'
+    target.write_text(original)
+    with pytest.raises(ValueError) as error:
+        config_env.embedding_provider()
+    assert str(error.value) == f"{path} must be a table"
+    assert target.read_text() == original
+    with pytest.raises(ValueError):
+        config_file.write_values({"MEMU_MEMORY_MODE": "local"})
+    assert target.read_text() == original
+
+
 def test_custom_target_and_concurrent_processes(legacy, tmp_path, monkeypatch):
     legacy.write_text("MEMU_DB=/shared\nMEMU_CLIENT_ID=stable\n")
     target = tmp_path / "custom" / "memory.toml"
