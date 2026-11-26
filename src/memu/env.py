@@ -12,10 +12,9 @@ Values resolve in this order:
 
 1. the process environment (``MEMU_DB=… memu retrieve …`` wins, so a one-off
    override needs no file edit);
-2. ``~/.memu/config.env`` — a dotenv written once at install time. Scheduled
-   tasks run with no reliable working directory and do not inherit an
-   interactive shell, so a file at a known absolute path is the only robust
-   carrier; a ``export`` in a shell profile is not.
+2. ``~/.memu/config.toml`` — typed, grouped user configuration. Existing
+   ``config.env`` files migrate on first access and remain intact for rollback.
+   Failed migration keeps legacy reads available; an existing TOML is authoritative.
 3. the default argument, where one exists.
 
 :func:`require` deliberately has no default. Missing required config must
@@ -37,8 +36,8 @@ from typing import TYPE_CHECKING, Any, Literal
 if TYPE_CHECKING:
     from memu.agentic_backend import AgenticMemoryBackend
 
-CONFIG_ENV = "~/.memu/config.env"
-"""Where install persists the collected values. Override with ``MEMU_CONFIG_ENV``."""
+CONFIG_ENV = "~/.memu/config.toml"
+"""Shared user configuration. MEMU_CONFIG overrides the TOML path."""
 
 
 class ConfigError(RuntimeError):
@@ -48,14 +47,17 @@ class ConfigError(RuntimeError):
         if detail is not None:
             super().__init__(f"{name}: {detail}")
             return
+        from memu.config_schema import KEYS
+
+        setting = KEYS.get(name, name)
         super().__init__(
-            f"{name} is not set. Add it to {CONFIG_ENV} (or export it). Refusing to fall back to a "
+            f"{name} is not set. Set {setting} in {CONFIG_ENV} (or export {name}). Refusing to fall back to a "
             f"default: record and retrieval must use the same store, or retrieval finds nothing."
         )
 
 
 _ENV_PASSTHROUGH = ("NO_PROXY", "no_proxy")
-"""Non-``MEMU_*`` keys that ``config.env`` carries into the process environment.
+"""Non-``MEMU_*`` keys that configuration carries into the process environment.
 
 The guides call the file "the carrier" — a scheduled task has no interactive
 shell to inherit from — and a proxy exemption is exactly the kind of
@@ -87,26 +89,10 @@ def read_config(path: Path) -> tuple[str, bool]:
 
 @cache
 def _file_values() -> dict[str, str]:
-    """Parse the dotenv. Cached: entrypoint processes are short-lived.
+    """Read and cache shared file configuration, including network passthrough."""
+    from memu import config_file
 
-    Side effect, once per process: keys in :data:`_ENV_PASSTHROUGH` found in
-    the file are exported to ``os.environ`` (without overriding existing
-    values), so ``NO_PROXY`` written next to the ``MEMU_*`` settings actually
-    reaches httpx.
-    """
-    path = Path(os.path.expanduser(os.environ.get("MEMU_CONFIG_ENV", CONFIG_ENV)))
-    if not path.is_file():
-        return {}
-
-    values: dict[str, str] = {}
-    text, _ = read_config(path)
-    for raw in text.splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#"):
-            continue
-        key, sep, value = line.partition("=")
-        if sep:
-            values[key.strip()] = value.strip().strip("\"'")
+    values = config_file.read()
     for key in _ENV_PASSTHROUGH:
         if key in values:
             os.environ.setdefault(key, values[key])
@@ -114,7 +100,7 @@ def _file_values() -> dict[str, str]:
 
 
 def reload() -> None:
-    """Drop the cached dotenv — for tests, and for a process that rewrites it."""
+    """Drop cached file configuration after a command rewrites it."""
     _file_values.cache_clear()
 
 
@@ -175,7 +161,13 @@ def embedding_provider() -> str:
     model capability left, so ``MEMU_EMBED_PROVIDER`` is the primary variable;
     ``MEMU_LLM_PROVIDER`` is read as a fallback so existing ``~/.memu/config.env``
     files keep working."""
-    return env("MEMU_EMBED_PROVIDER") or env("MEMU_LLM_PROVIDER") or "openai"
+    return (
+        os.environ.get("MEMU_EMBED_PROVIDER")
+        or os.environ.get("MEMU_LLM_PROVIDER")
+        or env("MEMU_EMBED_PROVIDER")
+        or env("MEMU_LLM_PROVIDER")
+        or "openai"
+    )
 
 
 def embedding_profile() -> dict[str, Any]:
@@ -244,7 +236,7 @@ def cloud_api_key() -> str:
     if not value:
         raise ConfigError(
             "MEMU_CLOUD_API_KEY",
-            f"is required in cloud mode. Add it to {CONFIG_ENV} (or export it)",
+            f"is required in cloud mode. Set cloud.api_key in {CONFIG_ENV} (or export MEMU_CLOUD_API_KEY)",
         )
     return value
 

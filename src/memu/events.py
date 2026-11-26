@@ -42,8 +42,8 @@ recall-file names, no store DSN, no absolute paths, no transcripts.
 :data:`_ALLOWED_PROPERTIES` is where that is enforced, and it is an allowlist so
 that adding a leak takes a deliberate edit rather than an oversight.
 
-Switching it off: ``MEMU_TELEMETRY=0`` in ``~/.memu/config.env`` (or the
-environment), the conventional ``DO_NOT_TRACK=1``, or an empty
+Switching it off: ``[telemetry] enabled = false`` in ``~/.memu/config.toml``,
+``MEMU_TELEMETRY=0`` in the environment, the conventional ``DO_NOT_TRACK=1``, or an empty
 ``MEMU_EVENTS_BASE_URL`` — the same escape hatch ``MEMU_TEMPLATE_BASE_URL`` and
 ``MEMU_DOCS_BASE_URL`` already offer.
 
@@ -121,7 +121,7 @@ the agent never reached ``commit``, or its self-evolve pass produced nothing. So
 is what makes the mixture visible to a query."""
 
 CLI_INSTALL_STARTED = "cli_install_started"
-"""An install *attempt*, recorded by ``init`` once it has written ``config.env``.
+"""An install *attempt*, recorded by ``init`` once it has written configuration.
 
 ``SKILL.md`` Step 2 — the first command on the install path, and the first act
 that proves ``memu-cli`` is installed and resolving on ``PATH``. Code-observed
@@ -426,24 +426,14 @@ def client_version() -> str:
 
 
 def client_instance_id() -> str:
-    """This machine's stable id, generated once and kept in ``~/.memu/config.env``.
+    """This machine's stable id, generated once and kept in the config state file.
 
-    That file is the right home for one specific reason: ``UNINSTALL.md`` Part 3
-    says to keep it **always**, unconditionally, so install → uninstall →
-    reinstall joins into one instance's history — which is the whole point of the
-    id. The obvious alternative, ``~/.memu/hosts/<host>/``, is exactly what Part 3
-    tells the agent to remove, and would additionally fragment one machine into
-    one id per host.
+    State lives beside shared configuration, outside the per-host directories
+    removed during host uninstall, so reinstall keeps the same machine identity.
+    It contains an opaque random identifier, not a hostname or user name.
 
-    Opaque and random: no hostname, no MAC, no user name. Nothing is derived, so
-    nothing can be re-derived, and deleting the line is a complete reset.
-
-    Written through :func:`memu.config_file.write_values` rather than by appending
-    here, and that is not tidiness (ADR 0017). ``init`` now persists this same key,
-    and its writer is read-modify-write plus ``os.replace`` — which would silently
-    discard an append racing it. One writer, so the two cannot lose each other's
-    line; the fail-open ``except`` and the re-read below are this function's own
-    and survive the move.
+    Written through the shared locked writer rather than appending to a config
+    file; initialization and event reporting therefore share one persistence path.
     """
     existing = env("MEMU_CLIENT_ID")
     if existing:
@@ -458,9 +448,7 @@ def client_instance_id() -> str:
         # problem than telemetry continuity.
         return generated
 
-    # Two first runs racing would each append a line. Re-read rather than trust
-    # what we just wrote: the parser takes the last assignment, so both processes
-    # converge on the same value instead of splitting the machine in two.
+    # Re-resolve persisted state after writing, including another process's update.
     reload()
     return env("MEMU_CLIENT_ID") or generated
 
@@ -1076,7 +1064,7 @@ to end."""
 
 def _debug(message: str) -> None:
     """Narrate delivery when explicitly requested, without exporting payloads."""
-    if os.environ.get("MEMU_EVENTS_DEBUG") == "1":
+    if env("MEMU_EVENTS_DEBUG") == "1":
         print(f"[memu.events] {message}", file=sys.stderr)
 
 
