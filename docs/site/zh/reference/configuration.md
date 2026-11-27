@@ -32,29 +32,59 @@ api_key = "YOUR_MEMU_KEY"
 
 ## Local {#local}
 
-以 SQLite + OpenAI Embedding 为例：
+以 SQLite + 本地 Ollama Embedding 为例：先安装 Ollama，运行 `ollama pull nomic-embed-text`，并确认服务已在 `http://localhost:11434` 启动（尚未运行时执行 `ollama serve`）：
 
 ```sh
-memu-pi config --local --db "ABSOLUTE_PATH/memu.sqlite3" --embed-provider openai --embed-model text-embedding-3-small --embed-api-key "YOUR_EMBEDDING_KEY"
+memu-pi config --local --db "~/.memu/memu.sqlite3" --embed-provider openai --embed-model nomic-embed-text --embed-base-url "http://localhost:11434/v1" --embed-api-key "ollama"
 ```
 
-把路径替换为数据库文件的绝对路径，并提供 Embedding 服务的密钥。memU Cloud key 不能用于 Embedding 服务认证。对应 TOML：
+下面的 TOML 默认使用 Ollama，并附有 OpenAI 和豆包替换配置。切换服务时，将四个生效的 Embedding 值替换为对应的注释值，不要同时启用两组配置。memU Cloud key 不能用于 Embedding 服务认证。
 
 ```toml
 mode = "local"
 
 [local]
-db = "/absolute/path/memu.sqlite3"
+db = "~/.memu/memu.sqlite3"
 
 [embedding]
+# Ollama：先运行 `ollama pull nomic-embed-text` 并启动本地服务。
+# 使用 Ollama 的 OpenAI 兼容 API，因此 provider 填 "openai"。
+# 本地服务无需真实 API key，但这里需要填写非空占位值。
 provider = "openai"
-model = "text-embedding-3-small"
-api_key = "YOUR_EMBEDDING_KEY"
-# base_url = "https://your-compatible-endpoint/v1"
+model = "nomic-embed-text"
+base_url = "http://localhost:11434/v1"
+api_key = "ollama"
+
+# OpenAI：将上方四个生效值替换为：
+# provider = "openai"
+# model = "text-embedding-3-small"
+# base_url = "https://api.openai.com/v1"
+# api_key = "your-openai-key"
+
+# 豆包（火山引擎 Ark）：将上方四个生效值替换为：
+# provider = "doubao"
+# model = "doubao-embedding-large-text-250515"
+# base_url = "https://ark.cn-beijing.volces.com/api/v3"
+# api_key = "your-ark-key"
+# 使用你的 Ark 账号已开通的 Embedding 模型或 endpoint ID。
+
+# 可选：服务限制每次请求的输入数量时，可调低此值。
 # batch_size = 10
 ```
 
-Windows 可写成 `db = 'C:\data\memu.sqlite3'`（TOML 字面量字符串）或 `db = "C:/data/memu.sqlite3"`。更换服务使用 `--embed-provider` / `--embed-model`；自定义接口使用 `--embed-base-url`。`embedding.batch_size` 必须是正整数，服务限制每次请求的输入数量时可调低。不填写模型、密钥、端点或批大小时，使用 provider 默认值及其支持的环境变量。
+这里的 `provider` 选择 API 适配器，`base_url` 选择实际服务。Ollama 的 `/v1` 接口兼容 OpenAI，因此 `provider = "openai"` 是正确的；地址指向 Ollama 时，请求不会发往 OpenAI。其他 localhost 服务如果使用不同协议，需要对应的适配器。
+
+这些宿主配置默认使用 OpenAI SDK 客户端，会在 `base_url` 后追加 `/embeddings`：
+
+| 服务 | 实际 Embedding 请求 |
+| --- | --- |
+| Ollama | `POST http://localhost:11434/v1/embeddings` |
+| OpenAI | `POST https://api.openai.com/v1/embeddings` |
+| 豆包 | `POST https://ark.cn-beijing.volces.com/api/v3/embeddings` |
+
+用浏览器 GET 访问 API 根地址不是 Embedding 请求，可能返回 Not Found。如果 `doctor` 报 404，请核对完整请求路径，以及账号是否已开通所填模型或 endpoint ID。直接通过 Python 使用 `client_backend="httpx"` 时，豆包适配器会自行追加 `/api/v3/embeddings`，该客户端的 base URL 应只填域名。
+
+memU 会将数据库文件路径中的 `~` 展开为用户主目录。升级时保留已有数据库路径。Windows 显式路径可写成 `db = 'C:\data\memu.sqlite3'`（TOML 字面量字符串）或 `db = "C:/data/memu.sqlite3"`。更换服务使用 `--embed-provider` / `--embed-model`；自定义接口使用 `--embed-base-url`。`embedding.batch_size` 必须是正整数。不填写模型、密钥、端点或批大小时，使用 provider 默认值及其支持的环境变量。
 
 | 存储 | `local.db` 值 | 用途 |
 | --- | --- | --- |

@@ -32,29 +32,59 @@ Use `--cloud-base-url "URL"` for a custom Cloud endpoint. Cloud currently stores
 
 ## Local {#local}
 
-For SQLite with OpenAI embeddings:
+For SQLite with local Ollama embeddings, first install Ollama, run `ollama pull nomic-embed-text`, and make sure its server is running at `http://localhost:11434` (`ollama serve` if it is not already running):
 
 ```sh
-memu-pi config --local --db "ABSOLUTE_PATH/memu.sqlite3" --embed-provider openai --embed-model text-embedding-3-small --embed-api-key "YOUR_EMBEDDING_KEY"
+memu-pi config --local --db "~/.memu/memu.sqlite3" --embed-provider openai --embed-model nomic-embed-text --embed-base-url "http://localhost:11434/v1" --embed-api-key "ollama"
 ```
 
-Replace the path with an absolute database file path and supply the embedding provider's key. A memU Cloud key does not authenticate an embedding provider. The corresponding TOML is:
+The following TOML uses Ollama by default and includes OpenAI and Doubao alternatives. To switch providers, replace the four active embedding values with the corresponding commented values; do not enable both sets at once. A memU Cloud key does not authenticate an embedding provider.
 
 ```toml
 mode = "local"
 
 [local]
-db = "/absolute/path/memu.sqlite3"
+db = "~/.memu/memu.sqlite3"
 
 [embedding]
+# Ollama: run `ollama pull nomic-embed-text` and start the local server first.
+# provider is "openai" because this uses Ollama's OpenAI-compatible API.
+# The local server does not require a real API key; use a nonempty placeholder.
 provider = "openai"
-model = "text-embedding-3-small"
-api_key = "YOUR_EMBEDDING_KEY"
-# base_url = "https://your-compatible-endpoint/v1"
+model = "nomic-embed-text"
+base_url = "http://localhost:11434/v1"
+api_key = "ollama"
+
+# OpenAI: replace the four active values above with:
+# provider = "openai"
+# model = "text-embedding-3-small"
+# base_url = "https://api.openai.com/v1"
+# api_key = "your-openai-key"
+
+# Doubao (Volcengine Ark): replace the four active values above with:
+# provider = "doubao"
+# model = "doubao-embedding-large-text-250515"
+# base_url = "https://ark.cn-beijing.volces.com/api/v3"
+# api_key = "your-ark-key"
+# Use the embedding model or endpoint ID enabled for your Ark account.
+
+# Optional: lower this when the provider limits inputs per request.
 # batch_size = 10
 ```
 
-On Windows, use a path such as `db = 'C:\data\memu.sqlite3'` (TOML literal string) or `db = "C:/data/memu.sqlite3"`. Change `--embed-provider` / `--embed-model` for another service; use `--embed-base-url` for a custom endpoint. `embedding.batch_size` must be a positive integer; lower it when a provider limits inputs per request. Omitted model, key, endpoint and batch size follow provider defaults and supported provider environment variables.
+Here `provider` identifies the API adapter, while `base_url` selects the server. Ollama's `/v1` API is OpenAI-compatible, so `provider = "openai"` is correct; it does not send requests to OpenAI when the URL points to Ollama. A localhost server using another API protocol would need a matching adapter.
+
+These host settings use the default OpenAI SDK client, which appends `/embeddings` to `base_url`:
+
+| Service | Actual embedding request |
+| --- | --- |
+| Ollama | `POST http://localhost:11434/v1/embeddings` |
+| OpenAI | `POST https://api.openai.com/v1/embeddings` |
+| Doubao | `POST https://ark.cn-beijing.volces.com/api/v3/embeddings` |
+
+A browser GET of an API base URL is not an embedding request and may return Not Found. If `doctor` reports 404, check the complete request path and whether the model or endpoint ID is enabled for your account. For direct Python integrations using `client_backend="httpx"`, the Doubao adapter itself appends `/api/v3/embeddings`; use the domain-only base URL with that client.
+
+memU expands `~` in the database file path to your home directory. Keep your existing database path when upgrading. On Windows, an explicit path can be written as `db = 'C:\data\memu.sqlite3'` (TOML literal string) or `db = "C:/data/memu.sqlite3"`. Change `--embed-provider` / `--embed-model` for another service; use `--embed-base-url` for a custom endpoint. `embedding.batch_size` must be a positive integer. Omitted model, key, endpoint and batch size follow provider defaults and supported provider environment variables.
 
 | Store | `local.db` value | Use |
 | --- | --- | --- |
