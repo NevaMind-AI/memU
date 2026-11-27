@@ -4,17 +4,25 @@ Retrieval searches existing memory. Injection makes the returned context availab
 
 ## Timing by host {#timing}
 
-| Host | Retrieval trigger | Context delivery |
-| --- | --- | --- |
-| [Codex](codex.md) | Asynchronous `UserPromptSubmit` hook | Hook `additionalContext` when retrieval completes |
-| [Claude Code](claude-code.md) | `UserPromptSubmit` with `asyncRewake` | Retrieved context can wake Claude after its initial response |
-| [pi](pi.md) | Extension `input` event | Hidden `memu-retrieval` message delivered as `steer`, with `triggerTurn: true` |
-| [Hermes](hermes.md) | Agent decides memory would help | Ordinary retrieve tool result, before continuing the task |
-| [Cursor](cursor.md) | Project `AGENTS.md` asks the agent to retrieve before answering | Ordinary retrieve tool result |
-| [OpenClaw](openclaw.md) | Workspace `AGENTS.md` points to the retrieval skill | Ordinary retrieve tool result |
-| [WorkBuddy](workbuddy.md) | Global `SOUL.md` asks the agent to retrieve before answering | Ordinary retrieve tool result |
+Use the moment you press Send as the dividing line. Separate **when search starts** from **when its results inform the answer**.
 
-Asynchronous retrieval does not hold the initial response until memory arrives. Instruction-based retrieval depends on the agent following its loaded instructions. Check the relevant host page for activation and verification.
+- **Before submit**: retrieve first, then send the prompt to the model.
+- **On submit**: pressing Send starts retrieval; the answer can begin in parallel.
+- **After submit**: the agent receives the request and searches while working on it.
+
+In the table, “current turn” means the answer to this request. A “follow-up turn” means further processing after the initial answer; you do not necessarily need to send another message.
+
+| Host | When retrieval starts | Current or follow-up turn |
+| --- | --- | --- |
+| [Codex](codex.md) | **On submit**, searching in the background | Results enter context when ready; they may inform the current or a follow-up turn, with no guarantee for the first answer |
+| [Claude Code](claude-code.md) | **On submit**, searching in the background | Results can wake the agent after its initial answer for further processing; no guarantee for the first answer |
+| [pi](pi.md) | **On submit**, searching in the background | Results can enter the current turn if ready in time; if the answer has finished, they trigger a follow-up turn |
+| [Hermes](hermes.md) | **After submit**, when the agent decides memory would help | Current turn: read results when needed, then continue the answer or task |
+| [Cursor](cursor.md) | **After submit**, instructed to search before answering | Current turn: read results, then answer; depends on the agent following the instruction |
+| [OpenClaw](openclaw.md) | **After submit**, instructed to search before answering | Current turn: read results, then answer; depends on the agent following the instruction |
+| [WorkBuddy](workbuddy.md) | **After submit**, instructed to search before answering | Current turn: read results, then answer; depends on the agent following the instruction |
+
+None of these integrations waits for retrieval to finish before submitting the prompt. Background search timing affects whether memory can inform the first answer. Each host's page explains implementation, activation and verification in more detail.
 
 ## From prompt to query {#query}
 

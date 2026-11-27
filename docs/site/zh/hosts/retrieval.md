@@ -4,17 +4,25 @@
 
 ## 各宿主的时机 {#timing}
 
-| 宿主 | 检索触发点 | 上下文投递方式 |
-| --- | --- | --- |
-| [Codex](codex.md) | 异步 `UserPromptSubmit` hook | 完成后通过 hook `additionalContext` 返回 |
-| [Claude Code](claude-code.md) | 带 `asyncRewake` 的 `UserPromptSubmit` | 检索上下文可能在首轮响应后唤醒 Claude |
-| [pi](pi.md) | 扩展 `input` 事件 | 隐藏的 `memu-retrieval` 消息，以 `steer` 投递，`triggerTurn: true` |
-| [Hermes](hermes.md) | Agent 判断记忆有助于任务 | 普通 retrieve 工具结果，读取后继续原任务 |
-| [Cursor](cursor.md) | 项目 `AGENTS.md` 要求回答前检索 | 普通 retrieve 工具结果 |
-| [OpenClaw](openclaw.md) | 工作区 `AGENTS.md` 指向检索技能 | 普通 retrieve 工具结果 |
-| [WorkBuddy](workbuddy.md) | 全局 `SOUL.md` 要求回答前检索 | 普通 retrieve 工具结果 |
+以你点击发送为分界，分开看两件事：**什么时候开始搜索**，以及**搜索结果什么时候用于回答**。
 
-异步检索不会等待记忆返回才开始首轮响应。指令驱动的检索依赖 Agent 遵循已经加载的指令。激活与验证方法见各宿主页面。
+- **发送前（before submit）**：先检索，再发送提示词给模型。
+- **发送时（on submit）**：点击发送就启动检索，回答可以同时开始。
+- **发送后（after submit）**：Agent 收到请求后，在处理任务时检索。
+
+下表的「当轮」指这次请求的回答；「后续回合」指首轮回答后的继续处理，不一定需要你再发一条消息。
+
+| 宿主 | 什么时候开始检索 | 当轮还是后续回合使用 |
+| --- | --- | --- |
+| [Codex](codex.md) | **发送时（on submit）**，后台搜索 | 完成后补入上下文；可能用于当轮，也可能到后续回合，不保证首个回答已用到记忆 |
+| [Claude Code](claude-code.md) | **发送时（on submit）**，后台搜索 | 可在首轮回答后唤醒 Agent，补充处理；不保证首个回答已用到记忆 |
+| [pi](pi.md) | **发送时（on submit）**，后台搜索 | 及时返回时补入当轮；回答已结束时触发后续回合继续处理 |
+| [Hermes](hermes.md) | **发送后（after submit）**，Agent 按需搜索 | 当轮：需要记忆时先读取结果，再继续回答或任务 |
+| [Cursor](cursor.md) | **发送后（after submit）**，Agent 按指令在回答前搜索 | 当轮：读取结果后回答，依赖 Agent 遵循指令 |
+| [OpenClaw](openclaw.md) | **发送后（after submit）**，Agent 按指令在回答前搜索 | 当轮：读取结果后回答，依赖 Agent 遵循指令 |
+| [WorkBuddy](workbuddy.md) | **发送后（after submit）**，Agent 按指令在回答前搜索 | 当轮：读取结果后回答，依赖 Agent 遵循指令 |
+
+当前这些接入方式都不会在发送前等待检索完成。后台搜索的完成时间会影响记忆能否用于首个回答。各宿主页面进一步说明实现、激活与验证方法。
 
 ## 从输入到查询 {#query}
 
