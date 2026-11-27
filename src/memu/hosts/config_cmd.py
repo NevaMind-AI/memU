@@ -1,4 +1,4 @@
-"""``init`` and ``config`` — the commands that write ``config.env`` (ADR 0017).
+"""``init`` and ``config`` — shared TOML configuration commands (ADR 0026).
 
 Two verbs over one writer, because they have different *policies* and are named
 on surfaces with different update rates. ``init`` is the inferring front door,
@@ -26,21 +26,6 @@ from typing import Any
 
 from memu import config_file, events
 from memu import env as env_module
-
-_RETRIEVAL_CONFIG_COMMENTS = """# Host retrieval score cutoffs (docs/retrieval.md)
-# MEMU_MEMORY_MODE selects independent Cloud or Local settings.
-# Cloud uses calibrated defaults; review them when the Cloud embedding model changes.
-# Uncomment to override; leave commented to follow defaults across upgrades.
-# MEMU_CLOUD_RETRIEVE_MIN_SCORE_SHORT=0.55
-# MEMU_CLOUD_RETRIEVE_MIN_SCORE_LONG=0.60
-# MEMU_CLOUD_RETRIEVE_MIN_SCORE_EXTRACTED=0.58
-# Local defaults to no filtering. Calibrate for your embedding model and corpus.
-# Replace the placeholders before uncommenting; recalibrate when changing models.
-# MEMU_LOCAL_RETRIEVE_MIN_SCORE_SHORT=<your-calibrated-score>
-# MEMU_LOCAL_RETRIEVE_MIN_SCORE_LONG=<your-calibrated-score>
-# MEMU_LOCAL_RETRIEVE_MIN_SCORE_EXTRACTED=<your-calibrated-score>
-# Values: finite [-1, 1]; score >= cutoff survives; -1 retains all valid cosine scores.
-"""
 
 IDENTITY_KEYS = ("MEMU_DB", "MEMU_EMBED_PROVIDER", "MEMU_EMBED_MODEL")
 """Keys that bind an embedding space, and may never be *changed* without ``--force``.
@@ -142,7 +127,9 @@ def _write(updates: dict[str, str]) -> None:
     own rows: what the agent needs first is what this machine's backend now is, and
     where the file lives only matters once it is asking a different question.
     """
-    path, _ = config_file.write_values(updates, comments=_RETRIEVAL_CONFIG_COMMENTS)
+    if "MEMU_QUERY_EXTRACT_ENABLED" not in config_file.read():
+        updates.setdefault("MEMU_QUERY_EXTRACT_ENABLED", "false")
+    path, _ = config_file.write_values(updates)
     env_module.reload()
     _row("config", f"{path} ({config_file.permission_note()})")
 
@@ -390,15 +377,15 @@ def _collect(updates: dict[str, str], args: argparse.Namespace, pairs: tuple[tup
 
 
 def _show() -> int:
-    """Print what the file declares. Writes nothing — the whole point.
+    """Report the file's settings after the shared one-time upgrade, if needed.
 
     Named ``show`` rather than being what a bare ``config`` does. A bare verb that
     printed while a bare ``init`` wrote is exactly the asymmetry agents get wrong,
     and this one is quoted in guides that an agent runs before deciding whether to
     configure anything.
     """
-    path = config_file.config_path()
     values = config_file.read()
+    path = config_file.active_path()
     if not path.is_file():
         _row("config", f"{path} (not created yet)")
         _row("mode", "local (default; nothing configured)")
@@ -447,7 +434,7 @@ def register(sub: Any, *, binary: str, host: str = "", session_id_env: str = "")
     """
     initialiser = sub.add_parser(
         "init",
-        help="Create or update ~/.memu/config.env — the one command SKILL.md names before `docs install`",
+        help="Create or update ~/.memu/config.toml — the one command SKILL.md names before `docs install`",
     )
     initialiser.add_argument(
         "--cloud-api-key",
@@ -458,7 +445,7 @@ def register(sub: Any, *, binary: str, host: str = "", session_id_env: str = "")
 
     configure = sub.add_parser(
         "config",
-        help="Set the memory backend explicitly in ~/.memu/config.env, or `config show` to read it",
+        help="Set the memory backend explicitly in ~/.memu/config.toml, or `config show` to read it",
     )
     # `show` as a positional rather than a flag, so the read side is a name an
     # agent types deliberately and can never be a bare `config` that wrote.

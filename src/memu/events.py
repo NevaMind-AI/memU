@@ -42,10 +42,14 @@ recall-file names, no store DSN, no absolute paths, no transcripts.
 :data:`_ALLOWED_PROPERTIES` is where that is enforced, and it is an allowlist so
 that adding a leak takes a deliberate edit rather than an oversight.
 
-Switching it off: ``MEMU_TELEMETRY=0`` in ``~/.memu/config.env`` (or the
-environment), the conventional ``DO_NOT_TRACK=1``, or an empty
+Switching it off: ``[telemetry] enabled = false`` in ``~/.memu/config.toml``,
+``MEMU_TELEMETRY=0`` in the environment, the conventional ``DO_NOT_TRACK=1``, or an empty
 ``MEMU_EVENTS_BASE_URL`` — the same escape hatch ``MEMU_TEMPLATE_BASE_URL`` and
 ``MEMU_DOCS_BASE_URL`` already offer.
+
+Delivery stays silent by default. Set ``MEMU_EVENTS_DEBUG=1`` to print the
+exception type or HTTP status for each failure on stderr; messages are never
+printed because they can contain proxy credentials or user paths.
 """
 
 from __future__ import annotations
@@ -55,6 +59,7 @@ import hashlib
 import json
 import os
 import platform
+import sys
 import time
 import traceback
 import urllib.error
@@ -116,7 +121,7 @@ the agent never reached ``commit``, or its self-evolve pass produced nothing. So
 is what makes the mixture visible to a query."""
 
 CLI_INSTALL_STARTED = "cli_install_started"
-"""An install *attempt*, recorded by ``init`` once it has written ``config.env``.
+"""An install *attempt*, recorded by ``init`` once it has written configuration.
 
 ``SKILL.md`` Step 2 — the first command on the install path, and the first act
 that proves ``memu-cli`` is installed and resolving on ``PATH``. Code-observed
@@ -421,24 +426,14 @@ def client_version() -> str:
 
 
 def client_instance_id() -> str:
-    """This machine's stable id, generated once and kept in ``~/.memu/config.env``.
+    """This machine's stable id, generated once and kept in the config state file.
 
-    That file is the right home for one specific reason: ``UNINSTALL.md`` Part 3
-    says to keep it **always**, unconditionally, so install → uninstall →
-    reinstall joins into one instance's history — which is the whole point of the
-    id. The obvious alternative, ``~/.memu/hosts/<host>/``, is exactly what Part 3
-    tells the agent to remove, and would additionally fragment one machine into
-    one id per host.
+    State lives beside shared configuration, outside the per-host directories
+    removed during host uninstall, so reinstall keeps the same machine identity.
+    It contains an opaque random identifier, not a hostname or user name.
 
-    Opaque and random: no hostname, no MAC, no user name. Nothing is derived, so
-    nothing can be re-derived, and deleting the line is a complete reset.
-
-    Written through :func:`memu.config_file.write_values` rather than by appending
-    here, and that is not tidiness (ADR 0017). ``init`` now persists this same key,
-    and its writer is read-modify-write plus ``os.replace`` — which would silently
-    discard an append racing it. One writer, so the two cannot lose each other's
-    line; the fail-open ``except`` and the re-read below are this function's own
-    and survive the move.
+    Written through the shared locked writer rather than appending to a config
+    file; initialization and event reporting therefore share one persistence path.
     """
     existing = env("MEMU_CLIENT_ID")
     if existing:
@@ -453,9 +448,7 @@ def client_instance_id() -> str:
         # problem than telemetry continuity.
         return generated
 
-    # Two first runs racing would each append a line. Re-read rather than trust
-    # what we just wrote: the parser takes the last assignment, so both processes
-    # converge on the same value instead of splitting the machine in two.
+    # Re-resolve persisted state after writing, including another process's update.
     reload()
     return env("MEMU_CLIENT_ID") or generated
 
@@ -884,47 +877,81 @@ def _flush() -> tuple[int, int]:
     _promote_drop_counter()
     accepted = rejected = 0
     posts_left = MAX_FLUSH_POSTS
-    for path in _pending():
-        events = _read(path)
-        if not events:
-            _unlink(path)
-            continue
-        index = 0
-        stalled = False
-        while index < len(events):
-            if posts_left <= 0:
-                # Out of budget, not broken: the tail is retained and the next
-                # flush picks up exactly where this one stopped.
-                stalled = True
-                break
-            outcome = _post(url, events[index])
-            posts_left -= 1
-            if outcome == RETRY:
-                # Left at `index`, so the event that failed is the first one
-                # retried rather than being counted as delivered.
-                stalled = True
-                break
-            index += 1
-            if outcome == ACCEPTED:
-                accepted += 1
-            else:
-                rejected += 1
-        if stalled:
-            _retain(path, events[index:])
+    pending = _sending_files()
+    rotated_live = False
+    if not pending:
+        pending = _rotate_spool()
+        rotated_live = True
+    path_index = 0
+    while path_index < len(pending):
+        path = pending[path_index]
+        sent, refused, posts_left, retained = _drain(path, url, posts_left)
+        accepted += sent
+        rejected += refused
+        if retained is not None:
+            _retain(path, retained)
             break
         _unlink(path)
+        path_index += 1
+        # A flush still drains everything it can. The live spool is rotated
+        # only after the older generation succeeded, so a persistent failure
+        # cannot turn every retry into another `.sending` file.
+        if path_index == len(pending) and not rotated_live and posts_left > 0:
+            pending.extend(_rotate_spool())
+            rotated_live = True
     return (accepted, rejected)
 
 
-def _pending() -> list[Path]:
-    """Files to deliver: any orphaned from a crashed flush, then the live spool.
+def _drain(path: Path, url: str, posts_left: int) -> tuple[int, int, int, list[dict[str, Any]] | None]:
+    """Deliver one spool generation, returning its undelivered tail when stalled."""
+    events = _read(path)
+    event_index = 0
+    accepted = rejected = 0
+    stalled = False
+    while event_index < len(events):
+        if posts_left <= 0:
+            # Out of budget, not broken: the tail is retained and the next
+            # flush picks up exactly where this one stopped.
+            stalled = True
+            break
+        outcome = _post(url, events[event_index])
+        posts_left -= 1
+        if outcome == RETRY:
+            # Left at `event_index`, so the event that failed is the first one
+            # retried rather than being counted as delivered.
+            stalled = True
+            break
+        event_index += 1
+        if outcome == ACCEPTED:
+            accepted += 1
+        else:
+            rejected += 1
+    return accepted, rejected, posts_left, events[event_index:] if stalled else None
+
+
+def _sending_files() -> list[Path]:
+    """Orphaned generations from a crashed or previously failed flush."""
+    spool = _spool_path()
+    if not spool.parent.is_dir():
+        return []
+    return sorted(spool.parent.glob(f"{spool.name}.*.sending"))
+
+
+def _rotate_spool() -> list[Path]:
+    """Move the live spool to one new generation, if it has any events.
 
     Rotating the spool with :func:`os.replace` is what makes a shared spool safe:
     concurrent appends land in a fresh file, and a flush that dies leaves a
     ``.sending`` file the next one picks up.
+
+    While that orphan is still undeliverable, the live spool stays in place. Its
+    own byte cap then bounds the total: one ``.sending`` generation plus one live
+    generation. Rotating on every failed attempt instead moved the growth to an
+    unbounded collection of ``.sending`` files, even though each individual file
+    was capped.
     """
     spool = _spool_path()
-    files = sorted(spool.parent.glob(f"{spool.name}.*.sending")) if spool.parent.is_dir() else []
+    files: list[Path] = []
     with contextlib.suppress(OSError):
         if spool.is_file() and spool.stat().st_size:
             target = spool.parent / f"{spool.name}.{uuid.uuid4().hex}.sending"
@@ -1035,6 +1062,18 @@ as healthy delivery — the precise class of invisible failure this module exist
 to end."""
 
 
+def _debug(message: str) -> None:
+    """Narrate delivery when explicitly requested, without exporting payloads."""
+    if env("MEMU_EVENTS_DEBUG") == "1":
+        print(f"[memu.events] {message}", file=sys.stderr)
+
+
+def _failure_name(exc: BaseException) -> str:
+    """The exception type, preferring a ``URLError``'s typed reason."""
+    reason = getattr(exc, "reason", None)
+    return type(reason if isinstance(reason, BaseException) else exc).__name__
+
+
 def _post(url: str, event: dict[str, Any]) -> str:
     """POST one event, returning one of :data:`ACCEPTED` / :data:`REJECTED` / :data:`RETRY`.
 
@@ -1060,13 +1099,23 @@ def _post(url: str, event: dict[str, Any]) -> str:
     request = urllib.request.Request(url, data=body, headers=_headers(), method="POST")  # noqa: S310
     try:
         with urllib.request.urlopen(request, timeout=_TIMEOUT_SECONDS, **trust.urlopen_kwargs()) as response:  # noqa: S310
-            return ACCEPTED if 200 <= getattr(response, "status", 200) < 300 else RETRY
+            status = getattr(response, "status", 200)
+            if 200 <= status < 300:
+                _debug(f"delivery accepted: HTTP {status}")
+                return ACCEPTED
+            _debug(f"delivery failed: HTTP {status}; spool retained for retry")
+            return RETRY
     except urllib.error.HTTPError as exc:
         # A permanent 4xx means the server will reject this payload every time;
         # retrying forever would pin the spool and eventually hit the cap, so
         # these are discarded. 429 is not permanent — that one waits.
-        return REJECTED if 400 <= exc.code < 500 and exc.code != 429 else RETRY
-    except Exception:
+        if 400 <= exc.code < 500 and exc.code != 429:
+            _debug(f"delivery rejected: HTTP {exc.code}; event discarded")
+            return REJECTED
+        _debug(f"delivery failed: HTTP {exc.code}; spool retained for retry")
+        return RETRY
+    except Exception as exc:
+        _debug(f"delivery failed: {_failure_name(exc)}; spool retained for retry")
         return RETRY
 
 

@@ -521,7 +521,7 @@ def test_openclaw_task_recreates_confirmed_bridge() -> None:
         (
             "cursor",
             ("$HOME/.memu/hosts/cursor/bridge.sh", "{{task_name}}"),
-            ("hosts/cursor/bridge\\.sh|memU bridging pipeline", "schedule uninstall"),
+            ("hosts/cursor/bridge.sh", "cursor-agent -p", "schedule uninstall"),
         ),
         (
             "hermes",
@@ -543,6 +543,13 @@ def test_os_scheduler_identity_docs_stay_aligned(
         assert signal in task_doc
     for signal in uninstall_signals:
         assert signal in uninstall_doc
+    if pkg == "cursor":
+        normalized = " ".join(uninstall_doc.split())
+        assert "inspect the action/wrapper to confirm this host" in normalized
+        assert "remove only those exact entries" in normalized
+        assert "`crontab -e`" in normalized
+        assert "could also match another host" in normalized
+        assert "grep -vE" not in uninstall_doc
 
 
 def test_native_scheduler_identity_docs_stay_explicit() -> None:
@@ -641,9 +648,9 @@ def test_hook_host_schedule_actions_on_every_platform(
     monkeypatch: pytest.MonkeyPatch, spec: HostSpec, system: str, action: str
 ) -> None:
     monkeypatch.setattr(windows.platform, "system", lambda: system)
-    if spec is CLAUDE and action == "uninstall":
+    if spec is CLAUDE and (action == "uninstall" or (action == "status" and system == "Darwin")):
         args = build_parser(spec).parse_args(["schedule", action])
-        assert args.action == "uninstall" and callable(args.handler)
+        assert args.action == action and callable(args.handler)
         return
     with pytest.raises(SystemExit) as exc:
         run(spec, ["schedule", action])
@@ -669,7 +676,7 @@ def test_claude_legacy_uninstall_delegates_to_shared_helper(
     assert len(calls) == 1 and calls[0].base == tmp_path
 
 
-@pytest.mark.parametrize("system", ("Linux", "Darwin"))
+@pytest.mark.parametrize("system", ("Linux",))
 def test_claude_legacy_uninstall_reports_unperformed_unix_cleanup(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], system: str
 ) -> None:

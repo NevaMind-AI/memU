@@ -16,7 +16,7 @@ from memu.hosts import templates
 from memu.hosts.bridging.instructions import MEMORY_JOB_TEMPLATE, SKILL_JOB_TEMPLATE, prepare_instruction_jobs
 from memu.hosts.bridging.layout import TRACK_DIRS
 from memu.hosts.bridging.manifest import diff_tracked, snapshot_tracked
-from memu.hosts.bridging.recall_files import read_recall_file, write_recall_file
+from memu.hosts.bridging.recall_files import finalize_recall_file, read_recall_file, write_recall_file
 from memu.hosts.bridging.resources import RESOURCE_JOB_TEMPLATE, prepare_resource_job, read_resources
 
 
@@ -182,6 +182,8 @@ async def commit_memorize(workspace: MemorizeWorkspace, backend: AgenticMemoryBa
         raise RuntimeError(msg) from exc
 
     try:
+        for path, recall_file in zip(changed, recall_files, strict=True):
+            finalize_recall_file(path, recall_file)
         snapshot_tracked(workspace.base, workspace.track_dirs, workspace.manifest)
         for stale in workspace.jobs.glob("*.txt"):
             stale.unlink()

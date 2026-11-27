@@ -51,16 +51,20 @@ def recall_file_path(base_dir: Path, subdir: str, name: str) -> Path:
     return base_dir / subdir / f"{name.replace(' ', '-')}.md"
 
 
-def write_recall_file(base_dir: Path, subdir: str, recall_file: dict[str, Any]) -> Path:
-    """Mirror one recall file into ``base_dir/subdir`` as front-mattered markdown."""
+def write_recall_file(base_dir: Path, subdir: str, recall_file: dict[str, Any]) -> Path | None:
+    """Mirror a recall file, or remove its mirror when a memory body is empty."""
     name = recall_file["name"]
     description = recall_file.get("description", "")
     content = recall_file.get("content") or ""
 
+    out_path = recall_file_path(base_dir, subdir, name)
+    if subdir == "memory" and not content.strip():
+        out_path.unlink(missing_ok=True)
+        return None
+
     out_dir = base_dir / subdir
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    out_path = recall_file_path(base_dir, subdir, name)
     _atomic_write_text(out_path, f"---\nname: {name}\ndescription: {description}\n---\n{content}")
     return out_path
 
@@ -72,9 +76,12 @@ def read_recall_file(path: Path, track: str) -> dict[str, Any]:
     tagging it with the ``track`` its directory represents (the file itself does
     not store the track). Mirrors the fields ``list_all_recall_files`` returns.
     Frontmatter delimiters occupy standalone ``---`` lines; a name or description
-    ending in ``---`` remains metadata.
+    ending in ``---`` remains metadata. Empty memory bodies require an explicit
+    ``empty: true`` acknowledgement; non-empty bodies take precedence over it.
+    The acknowledgement is local metadata and is not sent to the backend.
     """
     text = path.read_text(encoding="utf-8")
+    empty_markers: list[str] = []
     name = ""
     description = ""
     content = text
@@ -90,7 +97,26 @@ def read_recall_file(path: Path, track: str) -> dict[str, Any]:
                 name = value.strip()
             elif key.strip() == "description":
                 description = value.strip()
+            elif key.strip() == "empty":
+                empty_markers.append(value.strip())
     if not name:
         msg = f"recall file {path.name!r} requires a non-empty name in frontmatter"
         raise ValueError(msg)
+    if track == "memory" and not content.strip() and empty_markers != ["true"]:
+        msg = f"recall file {path.name!r} requires empty: true in frontmatter to submit an empty memory body"
+        raise ValueError(msg)
     return {"name": name, "track": track, "description": description, "content": content}
+
+
+def finalize_recall_file(path: Path, recall_file: dict[str, Any]) -> None:
+    """After successful commit, remove cleared mirrors or consume stale empty markers."""
+    if recall_file["track"] != "memory":
+        return
+    if not recall_file["content"].strip():
+        path.unlink(missing_ok=True)
+        return
+    text = path.read_text(encoding="utf-8")
+    _, frontmatter, content = re.split(r"^---\n", text, maxsplit=2, flags=re.MULTILINE)
+    cleaned = re.sub(r"^[ \t]*empty[ \t]*:[^\n]*\n?", "", frontmatter, flags=re.MULTILINE)
+    if cleaned != frontmatter:
+        _atomic_write_text(path, f"---\n{cleaned}---\n{content}")

@@ -36,8 +36,8 @@ def _context(snapshot: dict[str, Any]) -> dict[str, Any]:
                 "Use it when the user asks about memorization; do not proactively announce it. "
                 "started means processing began and completion is unconfirmed; busy means this submission "
                 "skipped because another run held the lock; worker_started means admission is unconfirmed. "
-                "Cooldown minutes are rounded up at observed_at. This snapshot is not a live status; "
-                "query hook-status for updated evidence.\n" + json.dumps(snapshot, ensure_ascii=False)
+                "Cooldown minutes are rounded up at observed_at. This snapshot is not a live status.\n"
+                + json.dumps(snapshot, ensure_ascii=False)
             ),
         }
     }

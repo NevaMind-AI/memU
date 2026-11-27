@@ -12,6 +12,7 @@ These pin the embedding module's contract:
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -21,6 +22,7 @@ if str(src_path) not in sys.path:
 
 import httpx  # noqa: E402
 import pytest  # noqa: E402
+from openai import AsyncOpenAI  # noqa: E402
 from pydantic import ValidationError  # noqa: E402
 
 from memu.app.settings import EmbeddingConfig  # noqa: E402
@@ -301,3 +303,46 @@ def test_embedding_config_provider_defaults():
     assert explicit.base_url == "https://proxy/v1"
     assert explicit.api_key == "real"
     assert explicit.embed_model == "custom"
+
+
+@pytest.mark.parametrize("inputs", [[], ["a"], ["a", "b", "c"]])
+async def test_sdk_embed_empty_and_batched_inputs(inputs: list[str]) -> None:
+    """An empty SDK batch is a no-op; nonempty batches retain their responses."""
+    posted: list[list[str]] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        batch = json.loads(request.content)["input"]
+        posted.append(batch)
+        if not batch:
+            return httpx.Response(400, json={"error": {"message": "input must not be empty"}})
+        return httpx.Response(
+            200,
+            json={
+                "object": "list",
+                "model": "m",
+                "data": [
+                    {"object": "embedding", "index": i, "embedding": [float(ord(text))]} for i, text in enumerate(batch)
+                ],
+                "usage": {"prompt_tokens": len(batch), "total_tokens": len(batch)},
+            },
+        )
+
+    client = OpenAIEmbeddingSDKClient(
+        base_url="https://embedding.test/v1", api_key="test", embed_model="m", batch_size=2
+    )
+    await client.client.close()
+    async with AsyncOpenAI(
+        base_url="https://embedding.test/v1",
+        api_key="test",
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(respond)),
+    ) as sdk:
+        client.client = sdk
+        vectors, raw = await client.embed(inputs)
+
+    assert posted == [inputs[i : i + 2] for i in range(0, len(inputs), 2)]
+    assert vectors == [[float(ord(text))] for text in inputs]
+    if inputs:
+        assert raw is not None
+        assert raw.usage.total_tokens == len(posted[-1])
+    else:
+        assert raw is None

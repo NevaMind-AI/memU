@@ -189,6 +189,14 @@ def prepare_instruction_jobs(
             input_path=session_dir / f"{idx}.jsonl",
             track_dir=memory_dir,
         )
+        instruction += (
+            "\n## Empty memory submissions\n\n"
+            "To intentionally clear a memory, keep its name/description frontmatter, add exactly one "
+            "`empty: true` field there, and leave the body blank. Blank memory bodies without this "
+            "acknowledgement are rejected. Missing files do not clear the backend. "
+            "Writing a non-empty body restores normal memory automatically; after a successful commit, "
+            "any empty marker is removed.\n"
+        )
         (job_dir / f"{idx}.txt").write_text(instruction, encoding="utf-8")
 
     for idx in range(1, num_sessions + 1):

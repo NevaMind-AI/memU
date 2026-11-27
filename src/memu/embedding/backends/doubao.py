@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import struct
 from typing import Any, Literal, cast
 
 from memu.embedding.backends.base import EmbeddingBackend
@@ -68,5 +70,14 @@ class DoubaoEmbeddingBackend(EmbeddingBackend):
         }
 
     def parse_multimodal_embedding_response(self, data: dict[str, Any]) -> list[list[float]]:
-        """Parse multimodal embedding response."""
-        return [cast(list[float], d["embedding"]) for d in data["data"]]
+        """Parse the single multimodal vector, including base64 float32 responses."""
+        result = data["data"]
+        items = [result] if isinstance(result, dict) else result
+        vectors: list[list[float]] = []
+        for item in items:
+            embedding = item["embedding"]
+            if isinstance(embedding, str):
+                raw = base64.b64decode(embedding, validate=True)
+                embedding = [value for (value,) in struct.iter_unpack("<f", raw)]
+            vectors.append(cast(list[float], embedding))
+        return vectors

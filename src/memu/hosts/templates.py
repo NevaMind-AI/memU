@@ -48,6 +48,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from memu import trust
+from memu.env import env_declared
 from memu.hosts.bridging.layout import BASE_DIR
 
 DEFAULT_BASE_URL = "https://memu.pro/sdk/instructions"
@@ -81,7 +82,7 @@ def _base_url() -> str | None:
     Read live rather than captured at import, so a test or an air-gapped install
     can steer it per process; an empty value disables the fetch.
     """
-    value = os.environ.get("MEMU_TEMPLATE_BASE_URL", DEFAULT_BASE_URL)
+    value = env_declared("MEMU_TEMPLATE_BASE_URL", DEFAULT_BASE_URL)
     return value or None
 
 
@@ -249,7 +250,7 @@ disabled — independently."""
 def _docs_base_url() -> str | None:
     """The docs server root, or ``None`` when remote doc refresh is off. Read live
     (not captured at import) so a test or air-gapped install can steer it."""
-    value = os.environ.get("MEMU_DOCS_BASE_URL", DEFAULT_DOCS_BASE_URL)
+    value = env_declared("MEMU_DOCS_BASE_URL", DEFAULT_DOCS_BASE_URL)
     return value or None
 
 
@@ -283,6 +284,8 @@ def _valid_doc(text: str) -> bool:
 def _valid_host_doc(host: str, filename: str, text: str) -> bool:
     """Keep lifecycle guides compatible with the installed record entry point."""
     if not _valid_doc(text):
+        return False
+    if filename == "UNINSTALL.md" and "<!-- memu-cleanup: owned-artifacts -->" not in text:
         return False
     if host == "codex" and filename in {"INSTALL.md", "UNINSTALL.md"}:
         if "<!-- memu-codex-record: submit-v1 -->" not in text:

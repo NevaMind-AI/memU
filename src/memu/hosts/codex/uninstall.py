@@ -1,4 +1,4 @@
-"""Remove the two memU Submit handlers from the default Codex home."""
+"""Remove memU Submit handlers and owned retrieval artifacts from the default Codex home."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
+from memu.hosts import instruction
 from memu.hosts.codex import cli_prepare
 from memu.hosts.codex import prompt_hook_install as hooks
 
@@ -201,15 +202,21 @@ def _apply_trust(server: hooks.AppServer, updates: list[tuple[str, dict[str, Any
 
 
 def register(sub: Any) -> None:
-    parser = sub.add_parser("uninstall", help="Unregister the memU retrieval and memorization hooks")
+    parser = sub.add_parser("uninstall", help="Remove memU hooks and owned retrieval instructions/skills")
     parser.add_argument("--codex", default=None, help="Codex CLI executable")
     parser.add_argument("--cwd", type=Path, default=Path.cwd(), help="Working directory for Codex read-back")
 
     async def handler(args: argparse.Namespace) -> int:
         print("\n🧹 memU Uninstaller", flush=True)
+        home = Path.home() / ".codex"
+        instruction.check_skill_cleanup(home / "skills", "memu-codex")
         removed = uninstall(args.codex, args.cwd.expanduser().resolve())
+        cleaned = instruction.cleanup([home / "AGENTS.md"], "memu-codex", skills_dir=home / "skills")
         print(f"✅ Removed {removed} memU hook(s)." if removed else "✅ No memU hooks to remove.")
-        print("💡 Memory, backend configuration and other integrations are preserved.")
+        print(f"✅ Removed {len(cleaned)} managed retrieval artifact(s).")
+        print(
+            "💡 Inspect historical schedules with memu-codex docs uninstall; memory and other integrations are preserved."
+        )
         return 0
 
     parser.set_defaults(handler=handler)

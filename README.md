@@ -202,7 +202,7 @@ uvx --from memu-cli memu     # CLI via uv, no install
 
 ## Configuration
 
-Values resolve in order: process env → `~/.memu/config.env` → default. Host adapters
+Values resolve in order: process env → `~/.memu/config.toml` → default. Host adapters
 share the configured Local or Cloud backend. See [Configuration](docs/site/reference/configuration.md)
 for backend selection, environment variables, embedding settings, and storage options.
 Run `<binary> doctor` to verify the connection.

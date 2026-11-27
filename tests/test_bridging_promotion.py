@@ -106,6 +106,82 @@ async def test_prepare_initializes_tracks_after_mirroring(rig, monkeypatch, trac
     assert list(layout.sessions.glob("*.jsonl")) == []
 
 
+@pytest.mark.parametrize("content", ["", " \n\t"])
+async def test_prepare_removes_empty_memory_mirror(rig, monkeypatch, content) -> None:
+    from unittest.mock import AsyncMock
+
+    import memu.hosts.bridging.pipeline as pipeline
+
+    source, layout, service = rig
+    layout.memory.mkdir(parents=True)
+    old = layout.memory / "empty.md"
+    old.write_text("old local content", encoding="utf-8")
+    monkeypatch.setattr(pipeline.templates, "resolve", lambda _key, fallback: fallback)
+    monkeypatch.setattr(
+        service,
+        "list_all_recall_files",
+        AsyncMock(
+            return_value={
+                "recall_files": [
+                    {"name": "empty", "track": "memory", "content": content},
+                    {"name": "new-empty", "track": "memory", "content": content},
+                    {"name": "empty", "track": "skill", "content": content},
+                ],
+                "next_cursor": None,
+            }
+        ),
+    )
+    await prepare(source, layout, verify_command="x verify-resources")
+    assert not old.exists()
+    assert not (layout.memory / "new-empty.md").exists()
+    assert (layout.skill / "empty.md").exists()
+
+
+@pytest.mark.parametrize("fail", [False, True])
+async def test_commit_removes_submitted_empty_memory_only_after_success(rig, monkeypatch, fail) -> None:
+    from unittest.mock import AsyncMock
+
+    import memu.hosts.bridging.pipeline as pipeline
+
+    source, layout, service = rig
+    monkeypatch.setattr(pipeline.templates, "resolve", lambda _key, fallback: fallback)
+    await prepare(source, layout, verify_command="x verify-resources")
+    memory = layout.memory / "different-filename.md"
+    memory.write_text("---\nname: empty\ndescription: keep\nempty: true\n---\n \t\n", encoding="utf-8")
+    skill = layout.skill / "empty.md"
+    skill.write_text("---\nname: empty\n---\n", encoding="utf-8")
+    before = layout.memory_manifest.read_bytes()
+    if fail:
+        monkeypatch.setattr(service, "commit_results", AsyncMock(side_effect=RuntimeError("backend failed")))
+        with pytest.raises(RuntimeError, match="backend failed"):
+            await commit(layout)
+        assert memory.exists()
+        assert layout.memory_manifest.read_bytes() == before
+        assert layout.session_manifest_pending.exists()
+    else:
+        await commit(layout)
+        assert not memory.exists()
+        assert "memory/different-filename.md" not in json.loads(layout.memory_manifest.read_text())
+        assert service.committed[0]["recall_files"][0]["name"] == "empty"
+        await commit(layout)
+        assert service.committed[1]["recall_files"] == []
+    assert skill.exists()
+
+
+async def test_missing_local_memory_does_not_submit_a_clear(rig, monkeypatch) -> None:
+    import memu.hosts.bridging.pipeline as pipeline
+
+    source, layout, service = rig
+    monkeypatch.setattr(pipeline.templates, "resolve", lambda _key, fallback: fallback)
+    await prepare(source, layout, verify_command="x verify-resources")
+    path = layout.memory / "note.md"
+    path.write_text("---\nname: note\n---\nremember this", encoding="utf-8")
+    await commit(layout)
+    path.unlink()
+    await commit(layout)
+    assert service.committed[1]["recall_files"] == []
+
+
 async def test_bare_prepare_leaves_the_promoted_cursor_untouched(rig) -> None:
     source, layout, _ = rig
 

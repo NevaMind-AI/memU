@@ -37,6 +37,7 @@ def test_owned_extension_install_and_remove(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_prompt_hook_returns_context_and_log(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("MEMU_QUERY_EXTRACT_ENABLED", "true")
     calls = []
 
     async def retrieve(query, *, query_kind):
@@ -52,7 +53,7 @@ async def test_prompt_hook_returns_context_and_log(tmp_path, monkeypatch, capsys
     assert await prompt_hook.prompt_hook(argparse.Namespace(base_dir=str(tmp_path))) == 0
     result = json.loads(capsys.readouterr().out)
     assert "An independently meaningful memory" in result["context"]
-    assert calls == [("a" * 2000, "long")]
+    assert calls == [("a" * 800, "long")]
     trace = json.loads(next((tmp_path / "log/hooks/retrieve").glob("*.json")).read_text(encoding="utf-8"))
     assert trace["query_truncated"] is True
     assert trace["extraction_status"] == "failed"

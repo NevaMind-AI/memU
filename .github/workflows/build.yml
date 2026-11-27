@@ -1,17 +1,42 @@
 name: build
 
+# Merge gates for main: style/type/dependency checks, unit tests, packaging
+# smoke test, and workflow lint.
+#
+# Runner selection
+#   - Code from this repository (branch pushes, main) runs on the self-hosted
+#     `staging-access` runners: CI is a non-production target.
+#   - Pull requests from forks run on GitHub-hosted runners. This repository is
+#     public, so fork code is untrusted and must never execute on a runner that
+#     can reach internal networks.
+# Job names stay identical on both paths, so the required status checks on
+# main match either way.
+
 on: [push, pull_request]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Same-repo branches are covered by the push event; pull_request only adds
+    # coverage for forks.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'staging-access' }}
+    timeout-minutes: 30
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.11", "3.13"]
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Install uv & set Python
         uses: astral-sh/setup-uv@v7
@@ -33,3 +58,68 @@ jobs:
 
       - name: Run tests
         run: uv run make test
+
+  package:
+    name: package
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'staging-access' }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.13"
+
+      # Same build + smoke test the publish workflow runs, so a broken wheel is
+      # caught before merge rather than at release time.
+      - name: Build wheel and sdist
+        run: uv build --out-dir dist
+
+      - name: Smoke test wheel
+        shell: bash
+        run: uvx --isolated --from ./dist/memu_cli-*.whl memu --help
+
+      # The self-hosted runners have no preinstalled Node.js (the hosted image does).
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Syntax check npm launcher
+        run: node --check npm/bin/memu.js
+
+  actionlint:
+    name: actionlint
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'staging-access' }}
+    timeout-minutes: 5
+    env:
+      ACTIONLINT_VERSION: "1.7.12"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install actionlint
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          base_url="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}"
+          install_dir="${RUNNER_TEMP}/actionlint"
+          mkdir -p "$install_dir"
+          cd "$install_dir"
+          curl --fail --location --silent --show-error --remote-name "${base_url}/${archive}"
+          curl --fail --location --silent --show-error --remote-name \
+            "${base_url}/actionlint_${ACTIONLINT_VERSION}_checksums.txt"
+          grep " ${archive}$" "actionlint_${ACTIONLINT_VERSION}_checksums.txt" \
+            | sha256sum --check --strict -
+          tar -xzf "$archive" actionlint
+          echo "$install_dir" >> "$GITHUB_PATH"
+
+      # Runner labels (staging-access / prod-access) are declared in .github/actionlint.yaml
+      - name: Lint GitHub Actions workflows
+        run: actionlint -no-color

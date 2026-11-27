@@ -49,7 +49,7 @@ def test_uninstall_removes_both_handlers_and_preserves_foreign_trust(home, monke
     retained = {
         "config.toml": 'model = "user-model"\n',
         "AGENTS.md": "user instructions",
-        "skills/memu-retrieve/SKILL.md": "legacy skill",
+        "skills/another-skill/SKILL.md": "user skill",
         "automations/legacy/automation.toml": "legacy task",
         "../.memu/hosts/codex/.session_manifest.codex.json.pending": "pending cursor",
         "../.memu/hosts/codex/.self_sessions.codex.json": "self sessions",

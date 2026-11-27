@@ -64,6 +64,29 @@ def test_bootstrap_overwrites_a_stale_mirror(tmp_path: pathlib.Path, monkeypatch
     assert (tmp_path / "memory" / "coffee-preferences.md").read_text(encoding="utf-8").endswith("No sugar.")
 
 
+@pytest.mark.parametrize("content", ["", " \n\t"])
+@pytest.mark.parametrize("existing", [False, True])
+def test_empty_memory_has_no_mirror_path(tmp_path: pathlib.Path, monkeypatch, content, existing) -> None:
+    monkeypatch.setattr(retrieval, "BASE_DIR", str(tmp_path))
+    path = tmp_path / "memory" / "coffee-preferences.md"
+    if existing:
+        path.parent.mkdir()
+        path.write_text("stale local content", encoding="utf-8")
+    result = _result()
+    result["segments"] = []
+    result["files"][0]["content"] = content
+    hit = retrieval._shape_for_agent(result)["hits"][0]
+    assert "path" not in hit
+    assert not path.exists()
+    assert hit["description"] == "How the user likes their coffee"
+
+
+def test_empty_skill_still_materializes(tmp_path: pathlib.Path) -> None:
+    path = write_recall_file(tmp_path, "skill", {"name": "deploy", "content": "", "description": "ship"})
+    assert path == tmp_path / "skill" / "deploy.md"
+    assert path.read_text(encoding="utf-8") == "---\nname: deploy\ndescription: ship\n---\n"
+
+
 def test_unmappable_source_keeps_content_inline_with_no_path(tmp_path: pathlib.Path, monkeypatch) -> None:
     monkeypatch.setattr(retrieval, "BASE_DIR", str(tmp_path))
     result = _result()

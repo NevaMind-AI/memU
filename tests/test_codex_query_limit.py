@@ -18,8 +18,10 @@ def extraction_failure(monkeypatch):
     monkeypatch.setattr(query_extraction, "_extract", fail)
 
 
-@pytest.mark.parametrize("length", [1999, 2000, 2001, 40000])
-def test_automatic_query_fallback_uses_first_2000_unicode_characters(tmp_path, monkeypatch, capsys, length):
+@pytest.mark.parametrize("length", [799, 800, 801, 1999, 2000, 2001, 40000])
+@pytest.mark.parametrize("enabled", [False, True])
+def test_automatic_query_fallback_uses_first_800_unicode_characters(tmp_path, monkeypatch, capsys, length, enabled):
+    monkeypatch.setenv("MEMU_QUERY_EXTRACT_ENABLED", str(enabled).lower())
     prompt = (' 中😀"\\\r\n' * 6000)[:length]
     event = {"hook_event_name": "UserPromptSubmit", "prompt": prompt}
     original = json.dumps(event)
@@ -43,14 +45,14 @@ def test_automatic_query_fallback_uses_first_2000_unicode_characters(tmp_path, m
         "--query-kind",
         "long",
     ]
-    assert calls[0][1]["input"] == prompt[:2000].encode("utf-8")
+    assert calls[0][1]["input"] == prompt[:800].encode("utf-8")
     assert event["prompt"] == prompt
     assert source.getvalue() == original
-    log = next((tmp_path / "log/hooks/retrieve").glob("*.log"))
-    final = json.loads(log.read_text(encoding="utf-8").splitlines()[-1])
+    log = next((tmp_path / "log/hooks/retrieve").glob("*.json"))
+    final = json.loads(log.read_text(encoding="utf-8"))
     assert final["prompt_chars"] == length
-    assert final["query_chars"] == min(length, 2000)
-    assert final["query_truncated"] is (length > 2000)
+    assert final["query_chars"] == min(length, 800)
+    assert final["query_truncated"] is (length > 800)
     assert final["prompt_sha256"] == hashlib.sha256(prompt.encode()).hexdigest()
 
 
@@ -67,7 +69,7 @@ def test_truncated_whitespace_query_does_not_call_backend(tmp_path, monkeypatch,
     assert main(["prompt-hook", "--base-dir", str(tmp_path)]) == 0
     assert not calls
     assert not capsys.readouterr().out
-    final = json.loads(next((tmp_path / "log/hooks/retrieve").glob("*.log")).read_text().splitlines()[-1])
+    final = json.loads(next((tmp_path / "log/hooks/retrieve").glob("*.json")).read_text(encoding="utf-8"))
     assert final["status"] == "empty_query"
 
 

@@ -29,7 +29,8 @@ def is_loopback_url(url: str) -> bool:
     call into a 502 unless the user hand-writes a ``NO_PROXY`` exemption.
     """
     host = urllib.parse.urlsplit(url).hostname or ""
-    if host == "localhost" or host.endswith(".localhost"):
+    localhost = host.removesuffix(".")
+    if localhost == "localhost" or localhost.endswith(".localhost"):
         return True
     try:
         return ipaddress.ip_address(host).is_loopback
