@@ -14,9 +14,9 @@
 
 | 宿主 | 什么时候开始检索 | 当轮还是后续回合使用 |
 | --- | --- | --- |
-| [Codex](codex.md) | **发送时（on submit）**，后台搜索 | 完成后补入上下文；可能用于当轮，也可能到后续回合，不保证首个回答已用到记忆 |
-| [Claude Code](claude-code.md) | **发送时（on submit）**，后台搜索 | 可在首轮回答后唤醒 Agent，补充处理；不保证首个回答已用到记忆 |
-| [pi](pi.md) | **发送时（on submit）**，后台搜索 | 及时返回时补入当轮；回答已结束时触发后续回合继续处理 |
+| [Codex](codex.md) | **发送时（on submit）**，后台搜索 | 后台检索，返回后注入；赶上当前回答就当轮使用，否则留到下一轮 |
+| [Claude Code](claude-code.md) | **发送时（on submit）**，后台搜索 | 检索完成后唤醒 Agent；首轮已结束时，会继续回答 |
+| [pi](pi.md) | **发送时（on submit）**，后台搜索 | 返回后注入；正在回答就接着用，回答结束则自动继续一轮 |
 | [Hermes](hermes.md) | **发送后（after submit）**，Agent 按需搜索 | 当轮：需要记忆时先读取结果，再继续回答或任务 |
 | [Cursor](cursor.md) | **发送后（after submit）**，Agent 按指令在回答前搜索 | 当轮：读取结果后回答，依赖 Agent 遵循指令 |
 | [OpenClaw](openclaw.md) | **发送后（after submit）**，Agent 按指令在回答前搜索 | 当轮：读取结果后回答，依赖 Agent 遵循指令 |

@@ -14,9 +14,9 @@ In the table, “current turn” means the answer to this request. A “follow-u
 
 | Host | When retrieval starts | Current or follow-up turn |
 | --- | --- | --- |
-| [Codex](codex.md) | **On submit**, searching in the background | Results enter context when ready; they may inform the current or a follow-up turn, with no guarantee for the first answer |
-| [Claude Code](claude-code.md) | **On submit**, searching in the background | Results can wake the agent after its initial answer for further processing; no guarantee for the first answer |
-| [pi](pi.md) | **On submit**, searching in the background | Results can enter the current turn if ready in time; if the answer has finished, they trigger a follow-up turn |
+| [Codex](codex.md) | **On submit**, searching in the background | Search runs in the background. Results inform the current answer if they arrive in time; otherwise, the next turn |
+| [Claude Code](claude-code.md) | **On submit**, searching in the background | Results wake the agent when ready; if the initial answer has finished, it continues answering |
+| [pi](pi.md) | **On submit**, searching in the background | Results arrive when ready: use them while answering, or automatically continue for another turn if the answer has finished |
 | [Hermes](hermes.md) | **After submit**, when the agent decides memory would help | Current turn: read results when needed, then continue the answer or task |
 | [Cursor](cursor.md) | **After submit**, instructed to search before answering | Current turn: read results, then answer; depends on the agent following the instruction |
 | [OpenClaw](openclaw.md) | **After submit**, instructed to search before answering | Current turn: read results, then answer; depends on the agent following the instruction |
