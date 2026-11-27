@@ -13,7 +13,12 @@ from memu.hosts.codex import query_extraction as extraction
 from memu.hosts.codex.cli import main
 
 
-@pytest.mark.parametrize("length", [199, 200, 201, 2000, 2001, 32000, 32001])
+@pytest.fixture(autouse=True)
+def enable_extraction(monkeypatch):
+    monkeypatch.setenv("MEMU_QUERY_EXTRACT_ENABLED", "true")
+
+
+@pytest.mark.parametrize("length", [199, 200, 201, 799, 800, 801, 2000, 2001, 32000, 32001])
 @pytest.mark.parametrize("whitespace", ["", " \t\n\u3000"])
 def test_length_routing(length, whitespace, monkeypatch):
     calls = []
@@ -26,10 +31,10 @@ def test_length_routing(length, whitespace, monkeypatch):
     prompt = whitespace + "中" * (length // 2) + whitespace + "中" * (length - length // 2) + whitespace
     trace: dict[str, Any] = {}
     query = extraction.select_query(prompt, trace)
-    expected = length >= 200 and len(prompt) <= 32000
+    expected = len(prompt) > 800 and len(prompt) <= 32000
     assert calls == ([prompt] if expected else [])
-    assert query == ("actual request near the end" if expected else prompt[:2000])
-    assert trace["query_source"] == ("extracted" if expected else "original" if len(prompt) <= 2000 else "prefix")
+    assert query == ("actual request near the end" if expected else prompt[:800])
+    assert trace["query_source"] == ("extracted" if expected else "original" if len(prompt) <= 800 else "prefix")
     if len(prompt) > 32000:
         assert trace["extraction_status"] == "input_limit"
 
@@ -49,7 +54,7 @@ def test_failure_falls_back(error, monkeypatch):
 
     monkeypatch.setattr(extraction, "_extract", fail)
     trace: dict[str, Any] = {}
-    assert extraction.select_query("x" * 2500, trace) == "x" * 2000
+    assert extraction.select_query("x" * 2500, trace) == "x" * 800
     assert trace["query_source"] == "prefix"
     assert trace["extraction_status"] == ("timeout" if isinstance(error, subprocess.TimeoutExpired) else "failed")
     assert trace["extraction_elapsed_ms"] >= 0
@@ -97,7 +102,7 @@ def test_extraction_output_and_command(value, monkeypatch):
 def test_missing_codex(monkeypatch):
     monkeypatch.setattr(extraction.cli_prepare, "_discover", lambda _: None)
     trace: dict[str, Any] = {}
-    assert extraction.select_query("x" * 600, trace) == "x" * 600
+    assert extraction.select_query("x" * 900, trace) == "x" * 800
     assert trace["extraction_status"] == "failed"
 
 
@@ -116,7 +121,7 @@ def test_windows_npm_wrapper_resolution(candidates, monkeypatch):
 
     monkeypatch.setattr(extraction, "_run", run)
     trace: dict[str, Any] = {}
-    assert extraction.select_query("x" * 600, trace) == ("topic" if candidates else "x" * 600)
+    assert extraction.select_query("x" * 900, trace) == ("topic" if candidates else "x" * 800)
     assert bool(seen) is bool(candidates)
     if candidates:
         assert seen[0][0] == str(candidates[0])
@@ -232,9 +237,9 @@ def test_desktop_only_query_extraction_falls_back_without_launching(monkeypatch,
     monkeypatch.setattr(setup, "_installation_directory", lambda: tmp_path / "standalone")
     monkeypatch.setattr(setup.shutil, "which", lambda name, **kw: None if kw else str(desktop))
     monkeypatch.setattr(extraction, "_run", lambda *a: pytest.fail("Desktop binary must not execute"))
-    prompt = "x" * extraction.EXTRACT_THRESHOLD
+    prompt = "x" * (extraction.EXTRACT_THRESHOLD + 1)
     trace: dict[str, Any] = {}
-    assert extraction.select_query(prompt, trace) == prompt
+    assert extraction.select_query(prompt, trace) == prompt[:800]
     assert trace["extraction_status"] == "failed"
     assert trace["extraction_error_type"] == "FileNotFoundError"
 

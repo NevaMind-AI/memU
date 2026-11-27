@@ -199,6 +199,22 @@ def test_config_commands_add_editable_retrieval_comments_once(config: pathlib.Pa
     assert config.read_text(encoding="utf-8") == edited
 
 
+@pytest.mark.parametrize("arguments", [["init"], ["init", "--cloud-api-key", "sk-1"], ["config", "--cloud"]])
+@pytest.mark.parametrize("existing", [None, "false", "true"])
+def test_config_commands_seed_editable_query_extraction_setting(config: pathlib.Path, arguments, existing, monkeypatch):
+    monkeypatch.setenv("MEMU_QUERY_EXTRACT_ENABLED", "true")
+    if existing is not None:
+        _write(config, f"# User settings\nMEMU_QUERY_EXTRACT_ENABLED={existing}\n")
+    assert run(SPEC, arguments) == 0
+    assert config_file.read()["MEMU_QUERY_EXTRACT_ENABLED"] == ("1" if existing == "true" else "0")
+    text = config.read_text(encoding="utf-8")
+    assert text.count("extract_query =") == 1
+    edited = text.replace("extract_query = false", "extract_query = true")
+    config.write_text(edited, encoding="utf-8")
+    assert run(SPEC, arguments) == 0
+    assert config.read_text(encoding="utf-8") == edited
+
+
 def test_bare_init_writes_local_and_a_client_id(config: pathlib.Path) -> None:
     assert run(SPEC, ["init"]) == 0
 

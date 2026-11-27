@@ -16,6 +16,7 @@ from memu.hosts.codex.cli import main
 
 @pytest.mark.parametrize("outcome", ["success", "empty", "filtered", "failure", "timeout", "invalid"])
 def test_prompt_hook_preserves_query_and_logs(tmp_path, monkeypatch, capsys, outcome):  # noqa: C901
+    monkeypatch.setenv("MEMU_QUERY_EXTRACT_ENABLED", "false")
     prompt = '  中文 "quoted"\nsecond line  '
     event = {"hook_event_name": "UserPromptSubmit", "session_id": "test-session", "prompt": prompt}
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
@@ -90,7 +91,7 @@ def test_prompt_hook_preserves_query_and_logs(tmp_path, monkeypatch, capsys, out
         assert metadata == {
             "query": prompt,
             "query_source": "original",
-            "extraction_status": "not_needed",
+            "extraction_status": "disabled",
             "query_kind": "short",
         }
         assert "memU retrieval completed" in context

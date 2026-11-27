@@ -18,6 +18,11 @@ api_key = ""
 base_url = ""
 # batch_size = 64
 
+[retrieval]
+# Extract queries only for inputs longer than 800 characters; adds a host-model call.
+# Disabled or failed extraction uses the first 800 characters directly.
+extract_query = false
+
 [retrieval.cloud.min_score]
 # Calibrated Cloud defaults; uncomment to override.
 # short = 0.55
