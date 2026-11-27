@@ -22,6 +22,20 @@
 
 memU is a lightweight, agent-driven memory system that gives users a shared LLM wiki across sessions, agents, and devices. It automatically distills your own reusable skills from your agent history. Its core memory logic is only 500 lines — compact enough to inspect, understand, and adapt.
 
+## Documentation
+
+Read the guides in [English](docs/site/index.md) or [简体中文](docs/site/zh/index.md).
+They cover setup, host adapters, configuration, the service API, and troubleshooting.
+To browse the site locally:
+
+```sh
+pnpm --dir docs install --frozen-lockfile
+pnpm --dir docs dev
+```
+
+Requires Node.js 22.12+ and pnpm 11.15.1. Production build and preview commands are in the
+[documentation guide](docs/site/development/documentation.md).
+
 ## Quick start
 
 memU works with Codex, Claude Code, Cursor, OpenClaw, Hermes, WorkBuddy, and pi. See [Host adapters](#host-adapters-memory-for-desktop-coding-agents).
@@ -175,61 +189,26 @@ memu-codex retrieve "What should I remember about this project?"
 # or: memu-claude-code / memu-cursor / memu-openclaw / memu-hermes / memu-workbuddy / memu-pi
 ```
 
-For pi, run `memu-pi install` to configure the memory backend and install the
-extension, then run `/reload` or open a new session. Submitted prompts start
-retrieval in the
-background; results enter the model context and resume an idle agent. After the
-user turn and pending retrieval settle, a background worker processes the saved
-conversation into memory using the active session's model. Workers share a lock
-and a 30-minute cooldown. Long prompts use an isolated, tool-free pi request to
-extract a search query with the active provider/model; extraction has a 12-second
-timeout and falls back to the original prefix. The installer registers and verifies
-the extension. Run `memu-pi uninstall` and reload to remove it.
-
-Host retrieval returns compact JSON with at most five self-contained `hits` plus independent `resources`. Each hit combines matched `text` with its source's `description`, `track`, and local mirror `path` (or inline `content` when no mirror is available). Its `score` describes the matched segment; `created_at` and `updated_at` describe the source file when available. Hits retain segment order, including excerpts whose source is missing; sources without matched excerpts remain source-only hits. Resources contain `path`, `caption`, and available scores/timestamps. Database IDs and scope metadata are omitted from the agent-facing output.
+For pi installation, extension activation, background memory behavior, and the compact
+retrieval output, see [Host adapters](docs/site/hosts/index.md).
 
 Install or invoke the CLI directly:
 
 ```bash
-pip install memu-cli         # library + memu + memu-codex CLIs
+uv tool install memu-cli     # isolated CLI install; uv manages Python
 npx memu-cli --help          # CLI via npm launcher (engine: PyPI package memu-cli)
 uvx --from memu-cli memu     # CLI via uv, no install
 ```
 
 ## Configuration
 
-Values resolve in order: process env → `~/.memu/config.env` → default. memU
-supports Local and Cloud memory backends, selected by `MEMU_MEMORY_MODE`; an
-unset mode remains Local for backward compatibility.
+Values resolve in order: process env → `~/.memu/config.toml` → default. Host adapters
+share the configured Local or Cloud backend. See [Configuration](docs/site/reference/configuration.md)
+for backend selection, environment variables, embedding settings, and storage options.
+Run `<binary> doctor` to verify the connection.
 
-For Local / self-hosted installations, every CLI flag has a matching variable:
+For direct Python integration, see [MemoryService](docs/site/reference/service.md).
 
-| Setting | Env var | Default |
-|---|---|---|
-| Store | `MEMU_DB` | `./data/memu.sqlite3` (CLI); **required** for host adapters |
-| Embedding provider | `MEMU_EMBED_PROVIDER` | `openai` (also: `jina`, `voyage`, `doubao`, `openrouter`); legacy `MEMU_LLM_PROVIDER` still read |
-| API key | `MEMU_API_KEY` | the provider's env var, e.g. `OPENAI_API_KEY` |
-| Embedding model | `MEMU_EMBED_MODEL` | the provider's default |
-| Embedding batch size | `MEMU_EMBED_BATCH_SIZE` | provider default (64); lower it for providers that cap inputs per request, e.g. `10` for DashScope |
-| Base URL | `MEMU_BASE_URL` | the provider's default |
-
-Run `<binary> doctor` to display the resolved mode and verify the same retrieval
-path the host uses.
-
-### Storage backends
-
-| Provider | DSN | Vector search | Use for |
-|---|---|---|---|
-| `inmemory` | — | brute-force cosine | tests, throwaway sessions |
-| `sqlite` | `sqlite:///path.sqlite3` | brute-force cosine | local/default, single writer |
-| `postgres` | `postgresql://...` | pgvector | concurrent access, large stores (`pip install "memu-cli[postgres]"`) |
-
-```python
-service = MemoryService(
-    database_config={"metadata_store": {"provider": "postgres", "dsn": "postgresql://..."}},
-    embedding_profiles={"default": {"provider": "jina"}},
-)
-```
 ## Community contributions
 
 Explore the community tasks ([English](docs/community/tasks.en.md) / [简体中文](docs/community/tasks.md)) and claim a task in
