@@ -1,4 +1,4 @@
-"""pi submit retrieval, invoked by the packaged extension without blocking input."""
+"""pi prompt retrieval, consumed by the extension at prompt boundaries."""
 
 from __future__ import annotations
 
@@ -69,8 +69,8 @@ async def prompt_hook(args: argparse.Namespace) -> int:
             )
             remaining = max(0.001, 40 - (time.monotonic() - started))
             memories = await asyncio.wait_for(retrieve(query, query_kind=kind), timeout=remaining)
-            context = render_context(memories)
             counts = {layer: len(memories.get(layer, [])) for layer in ("hits", "resources")}
+            context = render_context(memories) if any(counts.values()) else None
             trace.update(
                 status="context_returned" if any(counts.values()) else "empty_result",
                 retrieve_result=memories,

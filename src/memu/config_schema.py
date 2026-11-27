@@ -25,6 +25,7 @@ KEYS = {
     "MEMU_EVENTS_SPOOL": "telemetry.spool",
     "MEMU_EVENTS_DEBUG": "telemetry.debug",
     "MEMU_DEBUG": "debug",
+    "MEMU_PI_RECALL_SYNC": "hosts.pi.recall_sync",
     "MEMU_COWORK_ROOTS": "hosts.cowork.roots",
     "MEMU_DOCS_BASE_URL": "sources.docs",
     "MEMU_TEMPLATE_BASE_URL": "sources.templates",
@@ -33,7 +34,7 @@ for _backend in ("cloud", "local"):
     for _kind in ("short", "long", "extracted"):
         KEYS[f"MEMU_{_backend.upper()}_RETRIEVE_MIN_SCORE_{_kind.upper()}"] = f"retrieval.{_backend}.min_score.{_kind}"
 
-BOOLS = {"MEMU_QUERY_EXTRACT_ENABLED", "MEMU_TELEMETRY", "MEMU_EVENTS_DEBUG", "MEMU_DEBUG"}
+BOOLS = {"MEMU_PI_RECALL_SYNC", "MEMU_QUERY_EXTRACT_ENABLED", "MEMU_TELEMETRY", "MEMU_EVENTS_DEBUG", "MEMU_DEBUG"}
 SCORES = {key for key in KEYS if "_MIN_SCORE_" in key}
 
 

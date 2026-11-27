@@ -153,6 +153,7 @@ def test_all_public_keys_round_trip_through_typed_toml(legacy):
         if "_MIN_SCORE_" in key:
             values[key] = "0.61"
     values.update(
+        MEMU_PI_RECALL_SYNC="true",
         MEMU_MEMORY_MODE="local",
         MEMU_EMBED_BATCH_SIZE="7",
         MEMU_QUERY_EXTRACT_ENABLED="true",

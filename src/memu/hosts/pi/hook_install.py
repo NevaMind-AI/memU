@@ -11,6 +11,8 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
+from memu.config_schema import typed_value
+from memu.env import env
 from memu.hosts import instruction
 from memu.hosts.hooks.admission import workspace_lock
 from memu.hosts.pi import memorize_hook
@@ -94,6 +96,12 @@ async def _remove(args: argparse.Namespace) -> int:
     return 0
 
 
+async def _recall_settings(args: argparse.Namespace) -> int:
+    value = typed_value("MEMU_PI_RECALL_SYNC", env("MEMU_PI_RECALL_SYNC") or "true")
+    print(json.dumps({"recall_sync": value}))
+    return 0
+
+
 def register(sub: Any) -> None:
     parser = sub.add_parser(
         "uninstall", help="Remove memU's pi extension and owned retrieval instructions/skills; preserve memory"
@@ -102,7 +110,8 @@ def register(sub: Any) -> None:
     parser.set_defaults(handler=_remove, cleanup_retrieval=True)
     memorize_hook.register(sub)
     for name, handler, help_text in (
-        ("install-prompt-hook", _install, "Install pi's asynchronous retrieval and memorization extension"),
+        ("recall-settings", _recall_settings, "Resolve pi recall timing from shared configuration"),
+        ("install-prompt-hook", _install, "Install pi's retrieval and memorization extension"),
         ("prompt-hook", prompt_hook, "Retrieve context for a pi input event on stdin"),
         ("remove-prompt-hook", _remove, "Remove only memU's pi extension"),
     ):

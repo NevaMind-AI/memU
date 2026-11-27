@@ -88,6 +88,36 @@ async def test_retrieval_failure_is_logged(tmp_path, monkeypatch, capsys):
 
 
 @pytest.mark.asyncio
+async def test_empty_recall_does_not_return_reference(tmp_path, monkeypatch, capsys):
+    async def empty(*args, **kwargs):
+        return {"hits": [], "resources": []}
+
+    monkeypatch.setattr(prompt_hook, "retrieve", empty)
+    monkeypatch.setattr("sys.stdin", io.StringIO('{"prompt":"hello"}'))
+    assert await prompt_hook.prompt_hook(argparse.Namespace(base_dir=str(tmp_path))) == 0
+    assert json.loads(capsys.readouterr().out) == {"context": None}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("setting,expected", [(None, True), ("true", True), ("false", False)])
+async def test_recall_settings_from_toml(tmp_path, monkeypatch, capsys, setting, expected):
+    from memu import env
+
+    source = tmp_path / "config.env"
+    monkeypatch.setenv("MEMU_CONFIG_ENV", str(source))
+    monkeypatch.delenv("MEMU_CONFIG", raising=False)
+    monkeypatch.delenv("MEMU_PI_RECALL_SYNC", raising=False)
+    if setting:
+        source.with_suffix(".toml").write_text(f"[hosts.pi]\nrecall_sync = {setting}\n", encoding="utf-8")
+    env.reload()
+    try:
+        assert await hook_install._recall_settings(argparse.Namespace()) == 0
+        assert json.loads(capsys.readouterr().out) == {"recall_sync": expected}
+    finally:
+        env.reload()
+
+
+@pytest.mark.asyncio
 async def test_remove_preserves_foreign_extensions(tmp_path, monkeypatch):
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path))
     target = hook_install.install(tmp_path / "data")
