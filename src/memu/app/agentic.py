@@ -332,11 +332,10 @@ class AgenticMixin:
             return [], {}
 
         resource_where = {**where_filters, "track": "workspace"}
-        resource_pool = store.resource_repo.list_resources(resource_where)
-        resource_hits = store.resource_repo.vector_search_resources(
+        ranked = store.resource_repo.vector_search_resources(
             query_vector, self.progressive_retrieve_config.resource.top_k, where=resource_where
         )
-        return resource_hits, resource_pool
+        return [(resource.id, score) for resource, score in ranked], {resource.id: resource for resource, _ in ranked}
 
     def _materialize_hits(self, hits: Sequence[tuple[str, float]], pool: dict[str, Any]) -> list[dict[str, Any]]:
         """Expand ``(id, score)`` hits into scored, embedding-free dicts."""

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from sqlalchemy import event
 
 from memu.app import MemoryService
 from memu.app.memorize import lifecycle
@@ -131,6 +132,78 @@ async def test_progressive_retrieve_ranks_all_three_layers(service: MemoryServic
     assert file_names[0] == "profile"
     # Committed resources land on the workspace track and are retrievable.
     assert [r["url"] for r in result["resources"]] == ["/workspace/notes.md"]
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+async def test_resource_retrieval_loads_the_pool_once(
+    service: MemoryService, monkeypatch: pytest.MonkeyPatch, enabled: bool
+) -> None:
+    committed = await _seed(service)
+    service.progressive_retrieve_config.resource.enabled = enabled
+    repo = service.database.resource_repo
+    original_listing = repo.list_resources
+    listings: list[Any] = []
+
+    def count_listing(where: Any = None) -> Any:
+        listings.append(where)
+        return original_listing(where)
+
+    monkeypatch.setattr(repo, "list_resources", count_listing)
+    result = await service.progressive_retrieve("meeting notes")
+
+    assert listings == ([{"track": "workspace"}] if enabled else [])
+    assert result["resources"] == (
+        [{**committed["resources"][0], "score": pytest.approx(1.0, abs=1e-6)}] if enabled else []
+    )
+
+
+async def test_resource_retrieval_consumes_repository_hits_without_listing(
+    service: MemoryService, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scope = {"user_id": "synthetic-user", "agent_id": "synthetic-agent"}
+    committed = await service.commit_results(
+        user=scope, resource=[{"path": "/workspace/notes.md", "description": "meeting notes"}]
+    )
+    repo = service.database.resource_repo
+    resource = next(iter(repo.list_resources(scope).values()))
+    searches: list[Any] = []
+
+    def search(query_vec: list[float], top_k: int, where: Any = None) -> Any:
+        searches.append((top_k, where))
+        return [(resource, 42.0)]
+
+    def forbid_listing(where: Any = None) -> Any:
+        pytest.fail("repository hits must not require a full resource listing")
+
+    monkeypatch.setattr(repo, "vector_search_resources", search)
+    monkeypatch.setattr(repo, "list_resources", forbid_listing)
+    result = await service.progressive_retrieve("meeting notes", where=scope)
+
+    assert searches == [(service.progressive_retrieve_config.resource.top_k, {**scope, "track": "workspace"})]
+    assert result["resources"] == [{**committed["resources"][0], "score": 42.0}]
+
+
+async def test_sqlite_resource_retrieval_uses_one_select(tmp_path: Path) -> None:
+    service = make_service({"metadata_store": {"provider": "sqlite", "dsn": f"sqlite:///{tmp_path}/resources.sqlite3"}})
+    service.progressive_retrieve_config.file.enabled = False
+    await service.commit_results(resource=[{"path": "/workspace/notes.md", "description": "meeting notes"}])
+    statements: list[str] = []
+
+    def record_select(
+        connection: Any, cursor: Any, statement: str, parameters: Any, context: Any, executemany: bool
+    ) -> None:
+        if statement.lstrip().upper().startswith("SELECT"):
+            statements.append(statement)
+
+    engine = service.database._sessions.engine  # type: ignore[attr-defined]
+    event.listen(engine, "before_cursor_execute", record_select)
+    try:
+        result = await service.progressive_retrieve("meeting notes")
+        assert len(statements) == 1
+        assert [resource["url"] for resource in result["resources"]] == ["/workspace/notes.md"]
+    finally:
+        event.remove(engine, "before_cursor_execute", record_select)
+        service.database.close()
 
 
 async def test_recommit_updates_content_and_segments(service: MemoryService) -> None:

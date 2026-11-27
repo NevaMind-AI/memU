@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from typing import Any, Protocol, runtime_checkable
 
 from memu.database.models import Resource
+from memu.vector import cosine_topk
 
 
 @runtime_checkable
@@ -55,12 +56,17 @@ class ResourceRepo(Protocol):
         query_vec: list[float],
         top_k: int,
         where: Mapping[str, Any] | None = None,
-    ) -> list[tuple[str, float]]:
+    ) -> list[tuple[Resource, float]]:
         """Rank resources by cosine similarity of their stored embeddings.
 
-        Returns a list of ``(resource_id, score)`` tuples ordered by descending
-        similarity. Resources without an embedding are skipped.
+        Returns ``(resource, score)`` pairs ordered by descending similarity,
+        at most ``top_k`` of them. Resources without an embedding are skipped.
+
+        The default scans the scoped pool once in Python. Backends may override
+        it to rank natively, returning the records the caller needs to read.
         """
-        ...
+        pool = self.list_resources(where)
+        ranked = cosine_topk(query_vec, [(rid, res.embedding) for rid, res in pool.items() if res.embedding], k=top_k)
+        return [(pool[resource_id], score) for resource_id, score in ranked]
 
     def load_existing(self) -> None: ...
