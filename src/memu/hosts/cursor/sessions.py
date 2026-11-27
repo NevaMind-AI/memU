@@ -66,7 +66,7 @@ class CursorTranscriptSource(TranscriptSource):
         if not isinstance(content, list):
             return RecordKind.OTHER
 
-        kinds = {block.get("type") for block in content if isinstance(block, dict)}
+        kinds = {block["type"] for block in content if isinstance(block, dict) and isinstance(block.get("type"), str)}
         if "text" in kinds:
             return RecordKind.MESSAGE
         if kinds & {"tool_use", "tool_result"}:
