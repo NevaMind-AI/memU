@@ -4,13 +4,13 @@
 
 | 宿主 | 命令 |
 | --- | --- |
-| Codex | `memu-codex` |
-| Claude Code | `memu-claude-code` |
-| Cursor | `memu-cursor` |
-| OpenClaw | `memu-openclaw` |
-| Hermes | `memu-hermes` |
-| WorkBuddy | `memu-workbuddy` |
-| pi | `memu-pi` |
+| [Codex](codex.md) | `memu-codex` |
+| [Claude Code](claude-code.md) | `memu-claude-code` |
+| [Cursor](cursor.md) | `memu-cursor` |
+| [OpenClaw](openclaw.md) | `memu-openclaw` |
+| [Hermes](hermes.md) | `memu-hermes` |
+| [WorkBuddy](workbuddy.md) | `memu-workbuddy` |
+| [pi](pi.md) | `memu-pi` |
 
 想让自己常用的 Coding Agent 也用上 memU？欢迎贡献新的宿主适配器，PR is welcome！开始前可以参考[贡献指南](https://github.com/XnneHangLab-Mirror/memU/blob/main/CONTRIBUTING.md)。
 
@@ -50,13 +50,13 @@ SKILL 安装和刷新会在 `SKILL.md` 旁写入 `.memu-owned.json`，记录宿�
 
 ## Hook 与激活
 
-Codex 和 Claude Code 安装器配置检索与后台记忆 hook。pi 使用扩展：提交输入时异步检索，响应和待处理检索结束后执行后台记忆。pi worker 共享工作区锁和 30 分钟冷却期。长查询通过当前 provider/model 提取，12 秒超时后回退到原始前缀。
+[检索与注入](retrieval.md)对照各宿主的触发/投递方式并解释结果格式，上表各宿主链接说明具体流程。[配置](../reference/configuration.md)介绍共享 TOML、查询提取和分数阈值。
 
-宿主可能使用模型整理记忆或提取查询。`MemoryService` 本身仍仅调用 Embedding。
+Codex 使用异步 submit hook；Claude Code 使用 `asyncRewake`；pi 使用输入扩展和 steer 消息。首轮响应可以早于检索完成，查询提取默认关闭。Hermes 按需检索，Cursor、OpenClaw 和 WorkBuddy 则通过常驻指令要求 Agent 回答前检索。
 
-安装 pi 后运行 `/reload` 或开启新会话；安装 Claude Code hook 后开启新会话。分别验证本地注册和宿主实际执行。
+宿主可能使用模型整理记忆或按需提取查询，`MemoryService` 本身仍仅调用 Embedding。写入与检索的生命周期独立，注册成功不能证明记忆处理或上下文投递已经完成。
 
-其他宿主按对应安装指南配置写入与检索。能力随宿主、系统和版本变化；已记录的平台限制见[仓库支持矩阵](https://github.com/XnneHangLab-Mirror/memU/blob/main/README.md#agent-support)。
+安装 pi 后执行 `/reload` 或开启新会话；安装 Claude Code hooks 或修改常驻指令后开启新会话。分别验证本地注册和宿主实际执行。能力随宿主、系统和版本变化，已记录的平台限制见[仓库支持矩阵](https://github.com/XnneHangLab-Mirror/memU/blob/main/README.md#agent-support)。
 
 ## 手动检索
 

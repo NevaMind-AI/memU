@@ -15,7 +15,7 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: 'Guide', link: '/guide/getting-started' },
-          { text: 'Reference', link: '/reference/configuration' },
+          { text: 'Config', link: '/reference/configuration' },
           { text: 'Contribute', link: '/development/documentation' },
         ],
         sidebar: [
@@ -23,6 +23,16 @@ export default defineConfig({
             { text: 'Getting started', link: '/guide/getting-started' },
             { text: 'Host adapters', link: '/hosts/' },
             { text: 'Troubleshooting', link: '/troubleshooting/' },
+          ] },
+          { text: 'Hosts: retrieval and injection', items: [
+            { text: 'Timing and result format', link: '/hosts/retrieval' },
+            { text: 'Codex', link: '/hosts/codex' },
+            { text: 'Claude Code', link: '/hosts/claude-code' },
+            { text: 'pi', link: '/hosts/pi' },
+            { text: 'Hermes', link: '/hosts/hermes' },
+            { text: 'Cursor', link: '/hosts/cursor' },
+            { text: 'OpenClaw', link: '/hosts/openclaw' },
+            { text: 'WorkBuddy', link: '/hosts/workbuddy' },
           ] },
           { text: 'Reference', items: [
             { text: 'Configuration', link: '/reference/configuration' },
@@ -44,7 +54,7 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: '指南', link: '/zh/guide/getting-started' },
-          { text: '参考', link: '/zh/reference/configuration' },
+          { text: '配置', link: '/zh/reference/configuration' },
           { text: '参与贡献', link: '/zh/development/documentation' },
         ],
         sidebar: [
@@ -52,6 +62,16 @@ export default defineConfig({
             { text: '快速开始', link: '/zh/guide/getting-started' },
             { text: '宿主接入', link: '/zh/hosts/' },
             { text: '故障排查', link: '/zh/troubleshooting/' },
+          ] },
+          { text: '宿主：检索与注入', items: [
+            { text: '时机与结果格式', link: '/zh/hosts/retrieval' },
+            { text: 'Codex', link: '/zh/hosts/codex' },
+            { text: 'Claude Code', link: '/zh/hosts/claude-code' },
+            { text: 'pi', link: '/zh/hosts/pi' },
+            { text: 'Hermes', link: '/zh/hosts/hermes' },
+            { text: 'Cursor', link: '/zh/hosts/cursor' },
+            { text: 'OpenClaw', link: '/zh/hosts/openclaw' },
+            { text: 'WorkBuddy', link: '/zh/hosts/workbuddy' },
           ] },
           { text: '参考', items: [
             { text: '配置', link: '/zh/reference/configuration' },

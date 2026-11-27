@@ -4,13 +4,13 @@ Host adapters connect a desktop or coding agent to the shared memory backend. Ch
 
 | Host | Binary |
 | --- | --- |
-| Codex | `memu-codex` |
-| Claude Code | `memu-claude-code` |
-| Cursor | `memu-cursor` |
-| OpenClaw | `memu-openclaw` |
-| Hermes | `memu-hermes` |
-| WorkBuddy | `memu-workbuddy` |
-| pi | `memu-pi` |
+| [Codex](codex.md) | `memu-codex` |
+| [Claude Code](claude-code.md) | `memu-claude-code` |
+| [Cursor](cursor.md) | `memu-cursor` |
+| [OpenClaw](openclaw.md) | `memu-openclaw` |
+| [Hermes](hermes.md) | `memu-hermes` |
+| [WorkBuddy](workbuddy.md) | `memu-workbuddy` |
+| [pi](pi.md) | `memu-pi` |
 
 Want to bring memU to your favorite coding agent? New host adapters are welcome—PRs welcome! See the [contribution guide](https://github.com/XnneHangLab-Mirror/memU/blob/main/CONTRIBUTING.md) to get started.
 
@@ -71,13 +71,13 @@ or `/reload` pi, to unload previously loaded instructions/extensions.
 
 ## Hooks and activation
 
-Codex and Claude Code installers configure retrieval and background memory hooks. pi uses an extension: submitted prompts start asynchronous retrieval, and background memorization runs after the response and pending retrieval settle. pi workers share a workspace lock and a 30-minute cooldown. Long-query extraction uses the active provider/model, has a 12-second timeout, and falls back to the original prefix.
+See [Retrieval and injection](retrieval.md) for the trigger/delivery comparison and result format, then open your host's page above for its exact sequence. [Configuration](../reference/configuration.md) covers shared TOML settings, query extraction and score cutoffs.
 
-The host can use a model to prepare memory or extract a query. `MemoryService` itself remains embedding-only.
+Codex uses an asynchronous submit hook; Claude Code uses `asyncRewake`; pi uses an input extension and steer messages. Their initial responses can begin before retrieval finishes. Query extraction defaults off. Hermes retrieves on demand, while Cursor, OpenClaw and WorkBuddy use standing instructions to ask the agent to retrieve before answering.
 
-After installing pi, run `/reload` or open a new session. After installing Claude Code hooks, open a new session. Treat local registration checks and actual host execution as separate verification steps.
+The host can use a model to prepare memory or optionally extract a query. `MemoryService` itself remains embedding-only. Recording and retrieval have separate lifecycles; registration does not prove memory processing or context delivery.
 
-For other hosts, use their installation guide to configure recording and retrieval. Capabilities vary by host, OS, and version; check the [repository support matrix](https://github.com/XnneHangLab-Mirror/memU/blob/main/README.md#agent-support) for recorded platform limitations.
+After installing pi, run `/reload` or open a new session. After installing Claude Code hooks or changing standing instructions, open a new session. Verify actual host execution separately from local registration. Capabilities vary by host, OS, and version; check the [repository support matrix](https://github.com/XnneHangLab-Mirror/memU/blob/main/README.md#agent-support) for recorded platform limitations.
 
 ## Manual retrieval
 

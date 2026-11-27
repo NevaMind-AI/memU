@@ -32,7 +32,7 @@ pi workers use a shared workspace lock and a 30-minute cooldown. Allow the curre
 
 Cloud requires `MEMU_CLOUD_API_KEY`; Local embedding providers use `MEMU_API_KEY` or their provider-specific environment variable. Check the selected mode and endpoint before replacing keys.
 
-For 502 or connection errors, check system proxy settings and whether a local embedding endpoint is being routed through a proxy. `NO_PROXY` can be carried in `config.env`; keep exemptions specific to the endpoints that need direct access.
+For 502 or connection errors, check system proxy settings and whether a local embedding endpoint is being routed through a proxy. `network.no_proxy` in `config.toml` carries `NO_PROXY`; keep exemptions specific to the endpoints that need direct access.
 
 ## SQLite reports a lock
 

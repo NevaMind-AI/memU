@@ -32,7 +32,7 @@ pi worker 使用共享工作区锁和 30 分钟冷却期。先等待当前响应
 
 Cloud 需要 `MEMU_CLOUD_API_KEY`；Local Embedding provider 使用 `MEMU_API_KEY` 或对应 provider 的环境变量。更换密钥前先核对模式与端点。
 
-遇到 502 或连接错误时，检查系统代理配置，以及本地 Embedding 端点是否被送入代理。`config.env` 可以携带 `NO_PROXY`，仅为需要直连的端点配置豁免。
+遇到 502 或连接错误时，检查系统代理配置，以及本地 Embedding 端点是否被送入代理。`config.toml` 的 `network.no_proxy` 可以携带 `NO_PROXY`，仅为需要直连的端点配置豁免。
 
 ## SQLite 报锁错误
 
