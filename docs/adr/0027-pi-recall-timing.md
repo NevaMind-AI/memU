@@ -25,9 +25,14 @@ process override. A bounded `recall-settings` call resolves shared configuration
 at session start/reload. Changes take effect on reload/new session. A settings
 failure warns and leaves the synchronous default in place.
 
-- Synchronous: `before_agent_start` awaits current-prompt retrieval, then returns
-  a hidden reference message before generation. A three-second budget covers
-  subprocess startup and the entire hook; failure/timeout skips injection.
+- Prompt boundaries: idle prompts resolve in `before_agent_start` and return a
+  hidden reference message; steering or follow-up user prompts queued during
+  generation bypass `before_agent_start` and resolve in `context` once dequeued
+  at `message_start`, injecting the hidden reference after the user message for
+  that prompt's requests.
+- Synchronous: each prompt boundary awaits current-prompt retrieval before
+  generation. A three-second budget covers subprocess startup and the entire
+  hook; failure/timeout skips injection.
 - Asynchronous: start current-prompt retrieval without waiting. Only a completed
   result from the immediately preceding eligible prompt is offered at the next
   prompt boundary. The first prompt may have no memory. If a result is still
@@ -56,12 +61,13 @@ inside `before_agent_start`.
 ## Validation and limits
 
 Native Node tests execute the TypeScript extension with mocked child processes
-and pi events. They check same-prompt blocking, next-prompt consumption, zero
-steering, deadlines, late results, resets, context filtering and memorization
-ordering. Python tests cover TOML/default resolution, installation and empty
-recall. The lifecycle checks do not establish real-model answer quality or a
-production latency distribution. A live installed pi reload and representative
-answer-quality evaluation remain separate validation steps.
+and pi events. They check same-prompt blocking, next-prompt consumption, queued
+steering/follow-up prompt boundaries, zero steering, deadlines, late results,
+resets, context filtering and memorization ordering. Python tests cover
+TOML/default resolution, installation and empty recall. The lifecycle checks do
+not establish real-model answer quality or a production latency distribution. A
+live installed pi reload and representative answer-quality evaluation remain
+separate validation steps.
 
 The generated template exposes the setting; existing TOML without it uses the
 synchronous default. Existing installed extension copies need reinstallation
