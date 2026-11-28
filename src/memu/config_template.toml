@@ -47,6 +47,11 @@ enabled = true
 # spool = "~/.memu/events.jsonl"
 debug = false
 
+[hosts.pi]
+# Wait up to 3 seconds (including process startup) for current-prompt recall.
+# false: background recall is available at the next prompt, if ready.
+recall_sync = true
+
 [hosts.cowork]
 # roots = ["/path/to/session/directory"]
 
